@@ -51,3 +51,6 @@ build/
 
 # Test artifacts
 test/fixtures/local/
+
+# Git worktrees
+.worktrees/
