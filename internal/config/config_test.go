@@ -111,3 +111,35 @@ providers:
 		t.Errorf("Providers.GitHub.Token = %q, want empty string", cfg.Providers.GitHub.Token)
 	}
 }
+
+func TestLoadConfig_Defaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Minimal config - should fill in defaults
+	configContent := `
+server:
+  port: 9000
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Explicit value should be preserved
+	if cfg.Server.Port != 9000 {
+		t.Errorf("Server.Port = %d, want %d", cfg.Server.Port, 9000)
+	}
+
+	// Default values should be applied
+	if cfg.Server.Host != "0.0.0.0" {
+		t.Errorf("Server.Host = %q, want default %q", cfg.Server.Host, "0.0.0.0")
+	}
+	if cfg.Logging.RetentionDays != 30 {
+		t.Errorf("Logging.RetentionDays = %d, want default %d", cfg.Logging.RetentionDays, 30)
+	}
+}

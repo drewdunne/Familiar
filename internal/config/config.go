@@ -50,6 +50,20 @@ type GitLabConfig struct {
 // envVarPattern matches ${VAR_NAME} patterns.
 var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 
+// DefaultConfig returns a Config with default values.
+func DefaultConfig() *Config {
+	return &Config{
+		Server: ServerConfig{
+			Host: "0.0.0.0",
+			Port: 8080,
+		},
+		Logging: LoggingConfig{
+			Dir:           "/var/log/familiar",
+			RetentionDays: 30,
+		},
+	}
+}
+
 // Load reads and parses the config file at the given path.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -63,10 +77,12 @@ func Load(path string) (*Config, error) {
 		return []byte(os.Getenv(string(varName)))
 	})
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	// Start with defaults
+	cfg := DefaultConfig()
+
+	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parsing config file: %w", err)
 	}
 
-	return &cfg, nil
+	return cfg, nil
 }
