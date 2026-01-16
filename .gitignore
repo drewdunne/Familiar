@@ -1,5 +1,5 @@
 # Binaries
-familiar
+/familiar
 *.exe
 *.exe~
 *.dll
