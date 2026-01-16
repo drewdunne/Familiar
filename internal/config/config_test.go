@@ -49,3 +49,65 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 		t.Error("Load() expected error for nonexistent file, got nil")
 	}
 }
+
+func TestLoadConfig_EnvVarSubstitution(t *testing.T) {
+	// Set env var for test
+	os.Setenv("TEST_SECRET_TOKEN", "my-secret-value")
+	defer os.Unsetenv("TEST_SECRET_TOKEN")
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+providers:
+  github:
+    token: "${TEST_SECRET_TOKEN}"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Providers.GitHub.Token != "my-secret-value" {
+		t.Errorf("Providers.GitHub.Token = %q, want %q", cfg.Providers.GitHub.Token, "my-secret-value")
+	}
+}
+
+func TestLoadConfig_EnvVarNotSet(t *testing.T) {
+	// Ensure env var is not set
+	os.Unsetenv("NONEXISTENT_VAR")
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+providers:
+  github:
+    token: "${NONEXISTENT_VAR}"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Should be empty string when env var not set
+	if cfg.Providers.GitHub.Token != "" {
+		t.Errorf("Providers.GitHub.Token = %q, want empty string", cfg.Providers.GitHub.Token)
+	}
+}
