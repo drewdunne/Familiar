@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,5 +77,54 @@ func TestGitHubHandler_MissingSignature(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestGitHubHandler_InvalidJSON(t *testing.T) {
+	secret := "test-secret"
+	payload := `{invalid json`
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	handler := NewGitHubHandler(secret, func(event *GitHubEvent) error {
+		t.Error("handler should not be called with invalid JSON")
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github", strings.NewReader(payload))
+	req.Header.Set("X-Hub-Signature-256", signature)
+	req.Header.Set("X-GitHub-Event", "pull_request")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestGitHubHandler_HandlerError(t *testing.T) {
+	secret := "test-secret"
+	payload := `{"action":"opened"}`
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	handler := NewGitHubHandler(secret, func(event *GitHubEvent) error {
+		return fmt.Errorf("processing error")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github", strings.NewReader(payload))
+	req.Header.Set("X-Hub-Signature-256", signature)
+	req.Header.Set("X-GitHub-Event", "pull_request")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
