@@ -1,0 +1,70 @@
+# Familiar Configuration
+# Copy to config.yaml and customize
+
+server:
+  host: "0.0.0.0"
+  port: 7000
+
+logging:
+  dir: "/var/log/familiar"
+  retention_days: 30
+
+concurrency:
+  max_agents: 5
+  queue_size: 20
+
+agents:
+  timeout_minutes: 30
+  debounce_seconds: 10
+
+repo_cache:
+  dir: "/var/cache/familiar/repos"
+
+providers:
+  github:
+    auth_method: "pat"
+    token: "${GITHUB_TOKEN}"
+    webhook_secret: "${GITHUB_WEBHOOK_SECRET}"
+  gitlab:
+    auth_method: "pat"
+    token: "${GITLAB_TOKEN}"
+    webhook_secret: "${GITLAB_WEBHOOK_SECRET}"
+
+llm:
+  strategy: "api"
+  api:
+    provider: "anthropic"
+    model: "claude-sonnet-4-20250514"
+    api_key: "${ANTHROPIC_API_KEY}"
+
+# Default prompts per event type
+prompts:
+  mr_opened: |
+    Review this merge request for bugs, security issues, and code quality.
+    Provide actionable feedback as inline comments.
+
+  mr_comment: |
+    A user has commented on this merge request.
+    Address their question or request directly.
+
+  mr_updated: |
+    New commits have been pushed to this merge request.
+    Review the changes since your last review.
+
+  mention: |
+    You were mentioned in a comment.
+    Follow the user's instructions precisely.
+
+# Default permissions
+permissions:
+  merge: "never"
+  approve: "never"
+  push_commits: "on_request"
+  dismiss_reviews: "never"
+
+# Default enabled events
+events:
+  mr_opened: true
+  mr_comment: true
+  mr_updated: true
+  mention: true

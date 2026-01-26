@@ -1,0 +1,47 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run tests
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Check coverage
+        run: |
+          echo "=== Coverage by package ==="
+          go tool cover -func=coverage.out
+          echo ""
+          echo "=== Checking internal packages (must be >= 80%) ==="
+          # Check each internal package meets threshold (exclude cmd/ which is hard to test)
+          failed=0
+          for pkg in $(go tool cover -func=coverage.out | grep -E "^github.com/drewdunne/familiar/internal" | awk '{print $1}' | cut -d: -f1 | sort -u); do
+            pkg_cov=$(go tool cover -func=coverage.out | grep "^${pkg}:" | tail -1 | awk '{print $3}' | sed 's/%//')
+            if [ -n "$pkg_cov" ]; then
+              echo "$pkg: ${pkg_cov}%"
+              if (( $(echo "$pkg_cov < 80" | bc -l) )); then
+                echo "  ERROR: Coverage below 80%"
+                failed=1
+              fi
+            fi
+          done
+          if [ $failed -eq 1 ]; then
+            echo "Some packages are below 80% coverage threshold"
+            exit 1
+          fi
+          echo "All internal packages meet 80% coverage threshold"
+
+      - name: Build
+        run: go build -o familiar ./cmd/familiar
