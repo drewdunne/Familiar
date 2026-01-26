@@ -10,9 +10,43 @@ import (
 
 // Config represents the server configuration.
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Logging   LoggingConfig   `yaml:"logging"`
-	Providers ProvidersConfig `yaml:"providers"`
+	Server      ServerConfig            `yaml:"server"`
+	Logging     LoggingConfig           `yaml:"logging"`
+	Providers   ProvidersConfig         `yaml:"providers"`
+	Events      ServerEventsConfig      `yaml:"events"`
+	Permissions ServerPermissionsConfig `yaml:"permissions"`
+	Prompts     ServerPromptsConfig     `yaml:"prompts"`
+	Agents      AgentsConfig            `yaml:"agents"`
+}
+
+// ServerEventsConfig controls which events are enabled at server level.
+type ServerEventsConfig struct {
+	MROpened  bool `yaml:"mr_opened"`
+	MRComment bool `yaml:"mr_comment"`
+	MRUpdated bool `yaml:"mr_updated"`
+	Mention   bool `yaml:"mention"`
+}
+
+// ServerPermissionsConfig controls default agent permissions.
+type ServerPermissionsConfig struct {
+	Merge          string `yaml:"merge"`
+	Approve        string `yaml:"approve"`
+	PushCommits    string `yaml:"push_commits"`
+	DismissReviews string `yaml:"dismiss_reviews"`
+}
+
+// ServerPromptsConfig holds default prompts per event type.
+type ServerPromptsConfig struct {
+	MROpened  string `yaml:"mr_opened"`
+	MRComment string `yaml:"mr_comment"`
+	MRUpdated string `yaml:"mr_updated"`
+	Mention   string `yaml:"mention"`
+}
+
+// AgentsConfig holds agent settings.
+type AgentsConfig struct {
+	TimeoutMinutes  int `yaml:"timeout_minutes"`
+	DebounceSeconds int `yaml:"debounce_seconds"`
 }
 
 // ServerConfig holds HTTP server settings.
