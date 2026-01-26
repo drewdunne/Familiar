@@ -154,3 +154,62 @@ func TestNormalizeGitLabEvent_Mention(t *testing.T) {
 		t.Errorf("Type = %q, want %q", event.Type, TypeMention)
 	}
 }
+
+func TestNormalizeGitLabEvent_UnhandledAction(t *testing.T) {
+	raw := []byte(`{
+		"object_kind": "merge_request",
+		"object_attributes": {"action": "close"},
+		"project": {"path_with_namespace": "owner/repo", "git_http_url": "https://gitlab.com/owner/repo.git"},
+		"user": {"username": "actor"}
+	}`)
+
+	glEvent := &webhook.GitLabEvent{
+		EventType:  "Merge Request Hook",
+		ObjectKind: "merge_request",
+		RawPayload: raw,
+	}
+
+	_, err := NormalizeGitLabEvent(glEvent)
+	if err == nil {
+		t.Error("Expected error for unhandled action")
+	}
+}
+
+func TestNormalizeGitLabEvent_UnhandledObjectKind(t *testing.T) {
+	raw := []byte(`{
+		"object_kind": "push",
+		"project": {"path_with_namespace": "owner/repo", "git_http_url": "https://gitlab.com/owner/repo.git"},
+		"user": {"username": "actor"}
+	}`)
+
+	glEvent := &webhook.GitLabEvent{
+		EventType:  "Push Hook",
+		ObjectKind: "push",
+		RawPayload: raw,
+	}
+
+	_, err := NormalizeGitLabEvent(glEvent)
+	if err == nil {
+		t.Error("Expected error for unhandled object_kind")
+	}
+}
+
+func TestNormalizeGitLabEvent_NonMRNote(t *testing.T) {
+	raw := []byte(`{
+		"object_kind": "note",
+		"object_attributes": {"noteable_type": "Issue"},
+		"project": {"path_with_namespace": "owner/repo", "git_http_url": "https://gitlab.com/owner/repo.git"},
+		"user": {"username": "actor"}
+	}`)
+
+	glEvent := &webhook.GitLabEvent{
+		EventType:  "Note Hook",
+		ObjectKind: "note",
+		RawPayload: raw,
+	}
+
+	_, err := NormalizeGitLabEvent(glEvent)
+	if err == nil {
+		t.Error("Expected error for non-MR note")
+	}
+}

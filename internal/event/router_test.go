@@ -112,3 +112,40 @@ func TestRouter_Debounce(t *testing.T) {
 		t.Errorf("Handler called %d times, want 1 (second should be debounced)", callCount)
 	}
 }
+
+func TestRouter_AllEventTypes(t *testing.T) {
+	callCount := 0
+	handler := func(ctx context.Context, e *Event, cfg *config.MergedConfig) error {
+		callCount++
+		return nil
+	}
+
+	serverCfg := &config.Config{
+		Events: config.ServerEventsConfig{
+			MROpened:  true,
+			MRComment: true,
+			MRUpdated: true,
+			Mention:   true,
+		},
+		Agents: config.AgentsConfig{
+			DebounceSeconds: 0, // Use default
+		},
+	}
+
+	router := NewRouter(serverCfg, handler)
+
+	events := []*Event{
+		{Type: TypeMROpened, Provider: "github", RepoOwner: "o", RepoName: "r", MRNumber: 1},
+		{Type: TypeMRComment, Provider: "github", RepoOwner: "o", RepoName: "r", MRNumber: 2},
+		{Type: TypeMRUpdated, Provider: "github", RepoOwner: "o", RepoName: "r", MRNumber: 3},
+		{Type: TypeMention, Provider: "github", RepoOwner: "o", RepoName: "r", MRNumber: 4},
+	}
+
+	for _, e := range events {
+		router.Route(context.Background(), e)
+	}
+
+	if callCount != 4 {
+		t.Errorf("Handler called %d times, want 4", callCount)
+	}
+}

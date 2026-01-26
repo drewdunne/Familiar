@@ -62,3 +62,27 @@ func TestDebouncer_DifferentEvents(t *testing.T) {
 		t.Error("Different event should be accepted")
 	}
 }
+
+func TestDebouncer_Cleanup(t *testing.T) {
+	d := NewDebouncer(50 * time.Millisecond)
+
+	event := &Event{
+		Provider:  "github",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		Type:      TypeMRUpdated,
+		MRNumber:  42,
+	}
+
+	d.ShouldProcess(event)
+
+	// Wait long enough for cleanup threshold
+	time.Sleep(150 * time.Millisecond)
+
+	d.Cleanup()
+
+	// After cleanup, event should be accepted again
+	if !d.ShouldProcess(event) {
+		t.Error("Event should be accepted after cleanup")
+	}
+}
