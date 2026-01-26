@@ -17,6 +17,12 @@ const defaultBaseURL = "https://api.anthropic.com/v1"
 // Ensure Parser implements intent.Parser.
 var _ intent.Parser = (*Parser)(nil)
 
+func init() {
+	intent.Register(intent.StrategyAPI, func(apiKey, model string) intent.Parser {
+		return New(apiKey, model)
+	})
+}
+
 // Parser implements intent.Parser using the Anthropic API.
 type Parser struct {
 	apiKey  string
