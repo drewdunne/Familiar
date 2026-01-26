@@ -17,6 +17,7 @@ type Config struct {
 	Permissions ServerPermissionsConfig `yaml:"permissions"`
 	Prompts     ServerPromptsConfig     `yaml:"prompts"`
 	Agents      AgentsConfig            `yaml:"agents"`
+	LLM         LLMConfig               `yaml:"llm"`
 }
 
 // ServerEventsConfig controls which events are enabled at server level.
@@ -47,6 +48,19 @@ type ServerPromptsConfig struct {
 type AgentsConfig struct {
 	TimeoutMinutes  int `yaml:"timeout_minutes"`
 	DebounceSeconds int `yaml:"debounce_seconds"`
+}
+
+// LLMConfig holds LLM/intent parsing configuration.
+type LLMConfig struct {
+	Strategy string       `yaml:"strategy"`
+	API      LLMAPIConfig `yaml:"api"`
+}
+
+// LLMAPIConfig holds API-based LLM settings.
+type LLMAPIConfig struct {
+	Provider string `yaml:"provider"`
+	Model    string `yaml:"model"`
+	APIKey   string `yaml:"api_key"`
 }
 
 // ServerConfig holds HTTP server settings.
