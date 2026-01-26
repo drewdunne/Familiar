@@ -54,3 +54,50 @@ func (c *Cache) EnsureRepo(ctx context.Context, cloneURL, owner, repo string) (s
 func (c *Cache) RepoPath(owner, repo string) string {
 	return filepath.Join(c.baseDir, owner, repo+".git")
 }
+
+// CreateWorktree creates a git worktree for the given ref.
+// Returns the path to the worktree.
+func (c *Cache) CreateWorktree(ctx context.Context, owner, repo, ref, worktreeID string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	repoPath := c.RepoPath(owner, repo)
+	worktreePath := filepath.Join(repoPath, "worktrees-data", worktreeID)
+
+	// Create worktree directory
+	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
+		return "", fmt.Errorf("creating worktree directory: %w", err)
+	}
+
+	// Create worktree
+	cmd := exec.CommandContext(ctx, "git", "worktree", "add", "--detach", worktreePath, ref)
+	cmd.Dir = repoPath
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("creating worktree: %w: %s", err, output)
+	}
+
+	return worktreePath, nil
+}
+
+// RemoveWorktree removes a git worktree.
+func (c *Cache) RemoveWorktree(ctx context.Context, owner, repo, worktreeID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	repoPath := c.RepoPath(owner, repo)
+	worktreePath := filepath.Join(repoPath, "worktrees-data", worktreeID)
+
+	// Remove worktree
+	cmd := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", worktreePath)
+	cmd.Dir = repoPath
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("removing worktree: %w: %s", err, output)
+	}
+
+	return nil
+}
+
+// WorktreePath returns the path where a worktree would be created.
+func (c *Cache) WorktreePath(owner, repo, worktreeID string) string {
+	return filepath.Join(c.RepoPath(owner, repo), "worktrees-data", worktreeID)
+}

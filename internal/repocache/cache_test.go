@@ -73,3 +73,39 @@ func setupTestRepo(t *testing.T, dir string) {
 		t.Fatalf("git commit failed: %v", err)
 	}
 }
+
+func TestCache_CreateWorktree(t *testing.T) {
+	cacheDir := t.TempDir()
+	sourceDir := t.TempDir()
+	setupTestRepo(t, sourceDir)
+
+	cache := New(cacheDir)
+
+	// First ensure repo exists
+	_, err := cache.EnsureRepo(context.Background(), sourceDir, "test-owner", "test-repo")
+	if err != nil {
+		t.Fatalf("EnsureRepo() error = %v", err)
+	}
+
+	// Create worktree - need to use a branch name that exists
+	// The default branch after 'git init' is typically 'master' or 'main'
+	worktreePath, err := cache.CreateWorktree(context.Background(), "test-owner", "test-repo", "HEAD", "agent-123")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+
+	// Verify worktree exists and has files
+	if _, err := os.Stat(filepath.Join(worktreePath, "README.md")); os.IsNotExist(err) {
+		t.Error("Expected README.md in worktree")
+	}
+
+	// Clean up worktree
+	if err := cache.RemoveWorktree(context.Background(), "test-owner", "test-repo", "agent-123"); err != nil {
+		t.Errorf("RemoveWorktree() error = %v", err)
+	}
+
+	// Verify worktree is gone
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Error("Worktree should be removed")
+	}
+}
