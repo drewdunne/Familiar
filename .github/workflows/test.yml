@@ -17,27 +17,30 @@ jobs:
           go-version: '1.25'
 
       - name: Run tests
-        run: go test -race -coverprofile=coverage.out ./...
+        run: go test -race -cover ./... 2>&1 | tee test-output.txt
 
       - name: Check coverage
         run: |
-          echo "=== Coverage by package ==="
-          # Run tests again to get package-level coverage output
-          go test -cover ./internal/... 2>&1 | tee coverage-summary.txt
+          echo "=== Test output ==="
+          cat test-output.txt
           echo ""
           echo "=== Checking internal packages (must be >= 80%) ==="
           failed=0
           while IFS= read -r line; do
             if echo "$line" | grep -q "coverage:"; then
               pkg=$(echo "$line" | awk '{print $2}')
-              cov=$(echo "$line" | grep -oP 'coverage: \K[0-9.]+')
-              echo "$pkg: ${cov}%"
-              if (( $(echo "$cov < 80" | bc -l) )); then
-                echo "  ERROR: Coverage below 80%"
-                failed=1
+              # Extract coverage percentage (handles both GNU and BSD grep)
+              cov=$(echo "$line" | sed -n 's/.*coverage: \([0-9.]*\)%.*/\1/p')
+              # Only check internal packages
+              if echo "$pkg" | grep -q "/internal/"; then
+                echo "$pkg: ${cov}%"
+                if [ -n "$cov" ] && [ "$(echo "$cov < 80" | bc -l)" -eq 1 ]; then
+                  echo "  ERROR: Coverage below 80%"
+                  failed=1
+                fi
               fi
             fi
-          done < coverage-summary.txt
+          done < test-output.txt
           if [ $failed -eq 1 ]; then
             echo "Some packages are below 80% coverage threshold"
             exit 1
