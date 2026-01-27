@@ -74,7 +74,6 @@ func TestManager_QueueLengthAndActiveCount(t *testing.T) {
 		MaxConcurrent: 1,
 		QueueSize:     5,
 	})
-	defer manager.Shutdown()
 
 	// Initially empty
 	if qlen := manager.QueueLength(); qlen != 0 {
@@ -87,6 +86,7 @@ func TestManager_QueueLengthAndActiveCount(t *testing.T) {
 	// Block the single worker
 	blocking := make(chan struct{})
 	started := make(chan struct{})
+	done := make(chan struct{})
 	manager.Enqueue(SpawnRequest{ID: "active"}, func(ctx context.Context, req SpawnRequest) error {
 		close(started)
 		<-blocking
@@ -102,9 +102,13 @@ func TestManager_QueueLengthAndActiveCount(t *testing.T) {
 		t.Errorf("ActiveCount() = %d, want 1", count)
 	}
 
-	// Queue some more requests
+	// Queue some more requests - track when they complete
+	var completed int32
 	for i := 0; i < 3; i++ {
 		manager.Enqueue(SpawnRequest{ID: fmt.Sprintf("queued-%d", i)}, func(ctx context.Context, req SpawnRequest) error {
+			if atomic.AddInt32(&completed, 1) == 3 {
+				close(done)
+			}
 			return nil
 		})
 	}
@@ -117,8 +121,13 @@ func TestManager_QueueLengthAndActiveCount(t *testing.T) {
 		t.Errorf("QueueLength() = %d, want >= 1", qlen)
 	}
 
-	// Unblock
+	// Unblock the first task
 	close(blocking)
+
+	// Wait for all queued tasks to complete before shutdown
+	<-done
+
+	manager.Shutdown()
 }
 
 func TestManager_DefaultConfig(t *testing.T) {
