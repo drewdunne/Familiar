@@ -8,7 +8,6 @@ import (
 func TestBuildClaudeCommand(t *testing.T) {
 	cmd := BuildClaudeCommand(ClaudeCommandConfig{
 		Prompt:     "Review this PR",
-		WorkDir:    "/workspace",
 		Autonomous: true,
 	})
 
@@ -27,7 +26,6 @@ func TestBuildClaudeCommand_AutonomousMode(t *testing.T) {
 	// Test with autonomous mode enabled
 	cmd := BuildClaudeCommand(ClaudeCommandConfig{
 		Prompt:     "Fix the bug",
-		WorkDir:    "/workspace",
 		Autonomous: true,
 	})
 
@@ -38,7 +36,6 @@ func TestBuildClaudeCommand_AutonomousMode(t *testing.T) {
 	// Test with autonomous mode disabled
 	cmdNonAuto := BuildClaudeCommand(ClaudeCommandConfig{
 		Prompt:     "Fix the bug",
-		WorkDir:    "/workspace",
 		Autonomous: false,
 	})
 
@@ -51,7 +48,6 @@ func TestBuildClaudeCommand_PromptEscaping(t *testing.T) {
 	// Test that single quotes in prompts are properly escaped
 	cmd := BuildClaudeCommand(ClaudeCommandConfig{
 		Prompt:     "Review the user's code",
-		WorkDir:    "/workspace",
 		Autonomous: false,
 	})
 
@@ -60,17 +56,15 @@ func TestBuildClaudeCommand_PromptEscaping(t *testing.T) {
 		t.Error("Command should not be empty")
 	}
 
-	// Should not have unescaped single quote that would break shell
-	// The escaped form should be: 'Review the user'"'"'s code'
-	if strings.Contains(cmd, "'s code'") && !strings.Contains(cmd, "'\"'\"'") {
-		t.Error("Single quotes should be escaped for shell safety")
+	// Should have the escaped form: 'Review the user'\''s code'
+	if !strings.Contains(cmd, "'\\''") {
+		t.Error("Single quotes should be escaped using '\\'' pattern for shell safety")
 	}
 }
 
 func TestBuildClaudeCommand_StartsWithClaude(t *testing.T) {
 	cmd := BuildClaudeCommand(ClaudeCommandConfig{
 		Prompt:     "Hello",
-		WorkDir:    "/workspace",
 		Autonomous: false,
 	})
 

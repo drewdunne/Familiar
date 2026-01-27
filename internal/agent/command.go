@@ -8,15 +8,14 @@ import (
 // ClaudeCommandConfig holds configuration for the Claude command.
 type ClaudeCommandConfig struct {
 	Prompt     string
-	WorkDir    string
 	Autonomous bool
 }
 
 // BuildClaudeCommand builds the command to run Claude Code in the container.
 func BuildClaudeCommand(cfg ClaudeCommandConfig) string {
 	// Escape the prompt for shell
-	// Pattern: replace ' with '"'"' (end quote, double-quoted quote, start quote)
-	escapedPrompt := strings.ReplaceAll(cfg.Prompt, "'", "'\"'\"'")
+	// Pattern: replace ' with '\'' (end quote, escaped quote, start quote)
+	escapedPrompt := strings.ReplaceAll(cfg.Prompt, "'", "'\\''")
 
 	var args []string
 	args = append(args, "claude")
