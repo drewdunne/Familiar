@@ -16,6 +16,7 @@ func TestManager_Queue(t *testing.T) {
 		MaxConcurrent: 2,
 		QueueSize:     5,
 	})
+	defer manager.Shutdown()
 
 	// Spawn function that tracks calls
 	spawnFn := func(ctx context.Context, req SpawnRequest) error {
@@ -42,6 +43,7 @@ func TestManager_QueueFull(t *testing.T) {
 		MaxConcurrent: 1,
 		QueueSize:     1,
 	})
+	defer manager.Shutdown()
 
 	// Block the single slot
 	blocking := make(chan struct{})
