@@ -128,3 +128,25 @@ func TestGitHubHandler_HandlerError(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
+
+func TestGitHubHandler_WrongSignatureFormat(t *testing.T) {
+	secret := "test-secret"
+	payload := `{"action":"opened"}`
+
+	handler := NewGitHubHandler(secret, func(event *GitHubEvent) error {
+		t.Error("handler should not be called with wrong signature format")
+		return nil
+	})
+
+	// Test signature without sha256= prefix
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github", strings.NewReader(payload))
+	req.Header.Set("X-Hub-Signature-256", "noprefixsignature")
+	req.Header.Set("X-GitHub-Event", "pull_request")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}

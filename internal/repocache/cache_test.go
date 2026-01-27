@@ -109,3 +109,25 @@ func TestCache_CreateWorktree(t *testing.T) {
 		t.Error("Worktree should be removed")
 	}
 }
+
+func TestCache_WorktreePath(t *testing.T) {
+	cache := New("/tmp/test-cache")
+
+	path := cache.WorktreePath("owner", "repo", "agent-123")
+	expected := "/tmp/test-cache/owner/repo.git/worktrees-data/agent-123"
+
+	if path != expected {
+		t.Errorf("WorktreePath() = %q, want %q", path, expected)
+	}
+}
+
+func TestCache_RepoPath(t *testing.T) {
+	cache := New("/tmp/test-cache")
+
+	path := cache.RepoPath("owner", "repo")
+	expected := "/tmp/test-cache/owner/repo.git"
+
+	if path != expected {
+		t.Errorf("RepoPath() = %q, want %q", path, expected)
+	}
+}

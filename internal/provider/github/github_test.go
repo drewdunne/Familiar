@@ -154,3 +154,68 @@ func TestGitHubProvider_GetComments(t *testing.T) {
 		t.Errorf("comments[0].Body = %q, want %q", comments[0].Body, "comment 1")
 	}
 }
+
+func TestGitHubProvider_GetRepository_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	p := New("test-token", WithBaseURL(server.URL))
+	_, err := p.GetRepository(context.Background(), "owner", "nonexistent")
+	if err == nil {
+		t.Error("GetRepository() expected error for non-existent repo")
+	}
+}
+
+func TestGitHubProvider_GetMergeRequest_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	p := New("test-token", WithBaseURL(server.URL))
+	_, err := p.GetMergeRequest(context.Background(), "owner", "repo", 999)
+	if err == nil {
+		t.Error("GetMergeRequest() expected error for non-existent MR")
+	}
+}
+
+func TestGitHubProvider_GetChangedFiles_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	p := New("test-token", WithBaseURL(server.URL))
+	_, err := p.GetChangedFiles(context.Background(), "owner", "repo", 42)
+	if err == nil {
+		t.Error("GetChangedFiles() expected error for server error")
+	}
+}
+
+func TestGitHubProvider_PostComment_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	p := New("test-token", WithBaseURL(server.URL))
+	err := p.PostComment(context.Background(), "owner", "repo", 42, "test")
+	if err == nil {
+		t.Error("PostComment() expected error for forbidden")
+	}
+}
+
+func TestGitHubProvider_GetComments_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	p := New("test-token", WithBaseURL(server.URL))
+	_, err := p.GetComments(context.Background(), "owner", "repo", 42)
+	if err == nil {
+		t.Error("GetComments() expected error for server unavailable")
+	}
+}

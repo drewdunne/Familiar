@@ -68,3 +68,72 @@ func TestManager_QueueFull(t *testing.T) {
 
 	close(blocking)
 }
+
+func TestManager_QueueLengthAndActiveCount(t *testing.T) {
+	manager := NewManager(ManagerConfig{
+		MaxConcurrent: 1,
+		QueueSize:     5,
+	})
+	defer manager.Shutdown()
+
+	// Initially empty
+	if qlen := manager.QueueLength(); qlen != 0 {
+		t.Errorf("QueueLength() = %d, want 0", qlen)
+	}
+	if count := manager.ActiveCount(); count != 0 {
+		t.Errorf("ActiveCount() = %d, want 0", count)
+	}
+
+	// Block the single worker
+	blocking := make(chan struct{})
+	started := make(chan struct{})
+	manager.Enqueue(SpawnRequest{ID: "active"}, func(ctx context.Context, req SpawnRequest) error {
+		close(started)
+		<-blocking
+		return nil
+	})
+
+	// Wait for it to start
+	<-started
+
+	// Check active count - should be 1
+	time.Sleep(10 * time.Millisecond) // Give time for semaphore to be acquired
+	if count := manager.ActiveCount(); count != 1 {
+		t.Errorf("ActiveCount() = %d, want 1", count)
+	}
+
+	// Queue some more requests
+	for i := 0; i < 3; i++ {
+		manager.Enqueue(SpawnRequest{ID: fmt.Sprintf("queued-%d", i)}, func(ctx context.Context, req SpawnRequest) error {
+			return nil
+		})
+	}
+
+	// Check queue length (some should be in queue while one is active)
+	// Note: since concurrent=1, items go to queue
+	time.Sleep(10 * time.Millisecond)
+	qlen := manager.QueueLength()
+	if qlen < 1 {
+		t.Errorf("QueueLength() = %d, want >= 1", qlen)
+	}
+
+	// Unblock
+	close(blocking)
+}
+
+func TestManager_DefaultConfig(t *testing.T) {
+	// Test with zero values - should use defaults
+	manager := NewManager(ManagerConfig{})
+	defer manager.Shutdown()
+
+	// Just verify it doesn't panic and works
+	err := manager.Enqueue(SpawnRequest{ID: "test"}, func(ctx context.Context, req SpawnRequest) error {
+		return nil
+	})
+	if err != nil {
+		t.Errorf("Enqueue() error = %v", err)
+	}
+
+	// Wait for processing
+	time.Sleep(50 * time.Millisecond)
+}

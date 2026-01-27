@@ -392,3 +392,44 @@ func TestRouter_IntentParsing_ParserError(t *testing.T) {
 		t.Error("Handler should receive nil intent when parser fails")
 	}
 }
+
+func TestRouter_UnknownEventType(t *testing.T) {
+	handlerCalled := false
+	handler := func(ctx context.Context, e *Event, cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) error {
+		handlerCalled = true
+		return nil
+	}
+
+	serverCfg := &config.Config{
+		Events: config.ServerEventsConfig{
+			MROpened:  true,
+			MRComment: true,
+			MRUpdated: true,
+			Mention:   true,
+		},
+		Agents: config.AgentsConfig{
+			DebounceSeconds: 1,
+		},
+	}
+
+	router := NewRouter(serverCfg, handler, nil)
+
+	// Event with unknown type
+	event := &Event{
+		Type:      Type("unknown_event"),
+		Provider:  "github",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		MRNumber:  42,
+	}
+
+	// Should not error but should not call handler either
+	err := router.Route(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Route() error = %v", err)
+	}
+
+	if handlerCalled {
+		t.Error("Handler should not be called for unknown event type")
+	}
+}
