@@ -25,10 +25,28 @@ func TestClient_ImageExists(t *testing.T) {
 	}
 	defer client.Close()
 
-	// Alpine should exist on most systems or be quick to pull
-	exists, err := client.ImageExists(context.Background(), "alpine:latest")
+	ctx := context.Background()
+
+	// Test with a non-existent image - should return false
+	exists, err := client.ImageExists(ctx, "nonexistent-image-that-does-not-exist:v999")
 	if err != nil {
-		t.Logf("ImageExists() error = %v (may need to pull image)", err)
+		t.Fatalf("ImageExists() unexpected error for non-existent image: %v", err)
 	}
-	_ = exists // Just checking it doesn't panic
+	if exists {
+		t.Error("ImageExists() returned true for non-existent image, expected false")
+	}
+
+	// Pull alpine (small image) to test positive case
+	if err := client.PullImage(ctx, "alpine:latest"); err != nil {
+		t.Skipf("Could not pull alpine image for test: %v", err)
+	}
+
+	// Now test that the pulled image exists
+	exists, err = client.ImageExists(ctx, "alpine:latest")
+	if err != nil {
+		t.Fatalf("ImageExists() unexpected error for pulled image: %v", err)
+	}
+	if !exists {
+		t.Error("ImageExists() returned false for pulled image, expected true")
+	}
 }

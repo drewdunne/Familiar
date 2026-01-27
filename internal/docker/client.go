@@ -139,18 +139,31 @@ func (c *Client) RemoveContainer(ctx context.Context, id string, force bool) err
 	return c.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: force})
 }
 
-// ExecInContainer runs a command in a container.
+// ExecInContainer runs a command in a container and waits for it to complete.
+// It returns an error if the command exits with a non-zero exit code.
 func (c *Client) ExecInContainer(ctx context.Context, containerID string, cmd []string) error {
-	exec, err := c.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
-		Cmd:          cmd,
-		AttachStdout: true,
-		AttachStderr: true,
+	execConfig, err := c.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		Cmd: cmd,
 	})
 	if err != nil {
 		return fmt.Errorf("creating exec: %w", err)
 	}
 
-	return c.cli.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{})
+	if err := c.cli.ContainerExecStart(ctx, execConfig.ID, container.ExecStartOptions{}); err != nil {
+		return fmt.Errorf("starting exec: %w", err)
+	}
+
+	// Wait for the exec to complete and check exit code
+	inspect, err := c.cli.ContainerExecInspect(ctx, execConfig.ID)
+	if err != nil {
+		return fmt.Errorf("inspecting exec: %w", err)
+	}
+
+	if inspect.ExitCode != 0 {
+		return fmt.Errorf("command exited with code %d", inspect.ExitCode)
+	}
+
+	return nil
 }
 
 // GetContainerLogs returns container logs.
