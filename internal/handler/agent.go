@@ -54,7 +54,9 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 	})
 	if err != nil {
 		// Cleanup worktree on failure
-		h.repoCache.RemoveWorktree(ctx, evt.RepoOwner, evt.RepoName, agentID)
+		if cleanupErr := h.repoCache.RemoveWorktree(ctx, evt.RepoOwner, evt.RepoName, agentID); cleanupErr != nil {
+			log.Printf("warning: failed to cleanup worktree %s: %v", agentID, cleanupErr)
+		}
 		return fmt.Errorf("spawning agent: %w", err)
 	}
 
