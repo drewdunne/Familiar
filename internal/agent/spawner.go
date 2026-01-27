@@ -3,7 +3,9 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,7 +17,6 @@ type SpawnerConfig struct {
 	Image         string
 	ClaudeAuthDir string
 	MaxAgents     int
-	QueueSize     int
 }
 
 // SpawnRequest contains parameters for spawning an agent.
@@ -115,9 +116,11 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 			"familiar.agent.id": req.ID,
 		},
 		// Start tmux session with claude command
+		// Escape single quotes in prompt to prevent shell injection
+		// Pattern: replace ' with '\'' (end quote, escaped quote, start quote)
 		Cmd: []string{"-c", fmt.Sprintf(
 			"tmux new-session -d -s claude '%s' && tmux wait-for claude",
-			req.Prompt,
+			strings.ReplaceAll(req.Prompt, "'", "'\\''"),
 		)},
 		Entrypoint: []string{"/bin/sh"},
 	})
@@ -157,6 +160,7 @@ func (s *Spawner) Stop(ctx context.Context, sessionID string) error {
 	// Stop container (10 second timeout)
 	if err := s.client.StopContainer(ctx, session.ContainerID, 10); err != nil {
 		// Log but continue to cleanup
+		log.Printf("warning: failed to stop container %s: %v", session.ContainerID, err)
 	}
 
 	// Remove container

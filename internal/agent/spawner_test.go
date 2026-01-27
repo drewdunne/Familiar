@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -86,7 +87,7 @@ func TestSpawner_MaxAgentsLimit(t *testing.T) {
 	// Spawn two agents (should succeed)
 	for i := 0; i < 2; i++ {
 		_, err := spawner.Spawn(context.Background(), SpawnRequest{
-			ID:           "agent-" + string(rune('0'+i)),
+			ID:           fmt.Sprintf("agent-%d", i),
 			WorktreePath: worktreeDir,
 			WorkDir:      "/workspace",
 			Prompt:       "sleep 60",
