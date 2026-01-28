@@ -5,12 +5,12 @@ import "time"
 // MergeRequest represents a merge request/pull request.
 type MergeRequest struct {
 	ID           int
-	Number       int       // PR number (GitHub) or MR IID (GitLab)
+	Number       int // PR number (GitHub) or MR IID (GitLab)
 	Title        string
 	Description  string
 	SourceBranch string
 	TargetBranch string
-	State        string    // open, closed, merged
+	State        string // open, closed, merged
 	Author       string
 	URL          string
 	CreatedAt    time.Time
@@ -35,10 +35,10 @@ type ChangedFile struct {
 
 // Repository represents a git repository.
 type Repository struct {
-	ID        int
-	Name      string
-	FullName  string // owner/repo
-	CloneURL  string
-	SSHURL    string
+	ID            int
+	Name          string
+	FullName      string // owner/repo
+	CloneURL      string
+	SSHURL        string
 	DefaultBranch string
 }

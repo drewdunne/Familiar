@@ -91,4 +91,3 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 	log.Printf("Spawned agent %s for %s/%s MR #%d (workDir: %s)", agentID, evt.RepoOwner, evt.RepoName, evt.MRNumber, workDir)
 	return nil
 }
-

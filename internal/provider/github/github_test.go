@@ -47,14 +47,14 @@ func TestGitHubProvider_GetMergeRequest(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":     999,
-			"number": 42,
-			"title":  "Test PR",
-			"body":   "Description",
-			"state":  "open",
-			"head":   map[string]string{"ref": "feature"},
-			"base":   map[string]string{"ref": "main"},
-			"user":   map[string]string{"login": "author"},
+			"id":       999,
+			"number":   42,
+			"title":    "Test PR",
+			"body":     "Description",
+			"state":    "open",
+			"head":     map[string]string{"ref": "feature"},
+			"base":     map[string]string{"ref": "main"},
+			"user":     map[string]string{"login": "author"},
 			"html_url": "https://github.com/owner/repo/pull/42",
 		})
 	}))
