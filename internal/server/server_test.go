@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/drewdunne/familiar/internal/config"
+	"github.com/drewdunne/familiar/internal/metrics"
 )
 
 func TestNewServer(t *testing.T) {
@@ -220,5 +221,120 @@ func TestServer_WebhookGitLabEndpoint(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("POST /webhook/gitlab status = %d, want %d, body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestServer_MetricsEndpoint(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+			Port: 8080,
+		},
+	}
+
+	srv := New(cfg)
+
+	// Reset metrics to a known state
+	metrics.Reset()
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET /metrics status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Parse the JSON response
+	var m metrics.Metrics
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("Failed to parse metrics response: %v", err)
+	}
+
+	// All metrics should be zero after reset
+	if m.AgentsSpawned != 0 {
+		t.Errorf("AgentsSpawned = %d, want 0", m.AgentsSpawned)
+	}
+	if m.AgentsCompleted != 0 {
+		t.Errorf("AgentsCompleted = %d, want 0", m.AgentsCompleted)
+	}
+	if m.AgentsFailed != 0 {
+		t.Errorf("AgentsFailed = %d, want 0", m.AgentsFailed)
+	}
+	if m.AgentsTimedOut != 0 {
+		t.Errorf("AgentsTimedOut = %d, want 0", m.AgentsTimedOut)
+	}
+	if m.WebhooksReceived != 0 {
+		t.Errorf("WebhooksReceived = %d, want 0", m.WebhooksReceived)
+	}
+	if m.WebhooksProcessed != 0 {
+		t.Errorf("WebhooksProcessed = %d, want 0", m.WebhooksProcessed)
+	}
+}
+
+func TestServer_MetricsEndpoint_ContentType(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+			Port: 8080,
+		},
+	}
+
+	srv := New(cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	contentType := rec.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("GET /metrics Content-Type = %q, want %q", contentType, "application/json")
+	}
+}
+
+func TestServer_MetricsEndpoint_ReflectsIncrements(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+			Port: 8080,
+		},
+	}
+
+	srv := New(cfg)
+
+	// Reset and set specific metrics
+	metrics.Reset()
+	metrics.AgentSpawned()
+	metrics.AgentSpawned()
+	metrics.AgentCompleted()
+	metrics.WebhookReceived()
+	metrics.WebhookReceived()
+	metrics.WebhookReceived()
+	metrics.WebhookProcessed()
+	metrics.WebhookProcessed()
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	var m metrics.Metrics
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("Failed to parse metrics response: %v", err)
+	}
+
+	if m.AgentsSpawned != 2 {
+		t.Errorf("AgentsSpawned = %d, want 2", m.AgentsSpawned)
+	}
+	if m.AgentsCompleted != 1 {
+		t.Errorf("AgentsCompleted = %d, want 1", m.AgentsCompleted)
+	}
+	if m.WebhooksReceived != 3 {
+		t.Errorf("WebhooksReceived = %d, want 3", m.WebhooksReceived)
+	}
+	if m.WebhooksProcessed != 2 {
+		t.Errorf("WebhooksProcessed = %d, want 2", m.WebhooksProcessed)
 	}
 }

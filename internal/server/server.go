@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"github.com/drewdunne/familiar/internal/config"
+	"github.com/drewdunne/familiar/internal/metrics"
 	"github.com/drewdunne/familiar/internal/webhook"
 )
 
@@ -50,6 +51,7 @@ func (s *Server) Handler() http.Handler {
 // routes sets up the HTTP routes.
 func (s *Server) routes() {
 	s.mux.HandleFunc("/health", s.handleHealth)
+	s.mux.HandleFunc("/metrics", s.handleMetrics)
 
 	// GitHub webhook
 	if s.cfg.Providers.GitHub.WebhookSecret != "" {
@@ -103,4 +105,12 @@ func (s *Server) handleGitLabEvent(event *webhook.GitLabEvent) error {
 	log.Printf("Received GitLab event: %s, kind: %s", event.EventType, event.ObjectKind)
 	// TODO: Route to event processor in future phases
 	return nil
+}
+
+// handleMetrics responds with current operational metrics.
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	m := metrics.Get()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(m)
 }
