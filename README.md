@@ -263,6 +263,82 @@ familiar/
 └── README.md
 ```
 
+## Deployment
+
+### Docker Deployment (Recommended)
+
+The easiest way to deploy Familiar is using Docker Compose:
+
+1. Copy the example configuration:
+   ```bash
+   cp config.example.yaml config.yaml
+   # Edit config.yaml with your settings
+   ```
+
+2. Set environment variables:
+   ```bash
+   export GITHUB_TOKEN="your-github-token"
+   export GITHUB_WEBHOOK_SECRET="your-webhook-secret"
+   export GITLAB_TOKEN="your-gitlab-token"
+   export GITLAB_WEBHOOK_SECRET="your-webhook-secret"
+   ```
+
+3. Start the service:
+   ```bash
+   docker compose up -d
+   ```
+
+4. View logs:
+   ```bash
+   docker compose logs -f
+   ```
+
+### Systemd Deployment
+
+For native deployment without Docker:
+
+1. Build the binary:
+   ```bash
+   go build -o familiar ./cmd/familiar
+   sudo mv familiar /usr/local/bin/
+   ```
+
+2. Create system user:
+   ```bash
+   sudo useradd -r -s /bin/false familiar
+   ```
+
+3. Set up directories:
+   ```bash
+   sudo mkdir -p /etc/familiar /var/log/familiar /var/cache/familiar
+   sudo cp config.example.yaml /etc/familiar/config.yaml
+   sudo chown -R familiar:familiar /var/log/familiar /var/cache/familiar
+   ```
+
+4. Create environment file:
+   ```bash
+   sudo tee /etc/familiar/env << EOF
+   GITHUB_TOKEN=your-github-token
+   GITHUB_WEBHOOK_SECRET=your-webhook-secret
+   GITLAB_TOKEN=your-gitlab-token
+   GITLAB_WEBHOOK_SECRET=your-webhook-secret
+   EOF
+   sudo chmod 600 /etc/familiar/env
+   ```
+
+5. Install and start the service:
+   ```bash
+   sudo cp deploy/familiar.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now familiar
+   ```
+
+6. Check status:
+   ```bash
+   sudo systemctl status familiar
+   sudo journalctl -u familiar -f
+   ```
+
 ## Documentation
 
 - [Design Document](docs/plans/2026-01-16-familiar-design.md) - Full architecture and implementation plan
