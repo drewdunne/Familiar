@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  familiar:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/etc/familiar/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - familiar-logs:/var/log/familiar
+      - familiar-cache:/var/cache/familiar
+    environment:
+      - GITHUB_TOKEN
+      - GITHUB_WEBHOOK_SECRET
+      - GITLAB_TOKEN
+      - GITLAB_WEBHOOK_SECRET
+    restart: unless-stopped
+
+volumes:
+  familiar-logs:
+  familiar-cache:
