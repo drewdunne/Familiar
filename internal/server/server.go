@@ -1,28 +1,45 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"os/exec"
 
 	"github.com/drewdunne/familiar/internal/config"
 	"github.com/drewdunne/familiar/internal/webhook"
 )
 
+// HealthResponse represents the health check response structure.
+type HealthResponse struct {
+	Status string                 `json:"status"`
+	Checks map[string]interface{} `json:"checks"`
+}
+
 // Server is the HTTP server for Familiar.
 type Server struct {
-	cfg        *config.Config
-	mux        *http.ServeMux
-	httpServer *httpServer
+	cfg             *config.Config
+	mux             *http.ServeMux
+	httpServer      *httpServer
+	dockerAvailable bool
 }
 
 // New creates a new Server with the given config.
 func New(cfg *config.Config) *Server {
 	s := &Server{
-		cfg: cfg,
-		mux: http.NewServeMux(),
+		cfg:             cfg,
+		mux:             http.NewServeMux(),
+		dockerAvailable: checkDockerAvailable(),
 	}
 	s.routes()
 	return s
+}
+
+// checkDockerAvailable checks if Docker is available on the system.
+func checkDockerAvailable() bool {
+	cmd := exec.Command("docker", "info")
+	err := cmd.Run()
+	return err == nil
 }
 
 // Handler returns the HTTP handler for the server.
@@ -55,8 +72,23 @@ func (s *Server) routes() {
 
 // handleHealth responds with server health status.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	checks := map[string]interface{}{
+		"docker":        s.dockerAvailable,
+		"active_agents": 0, // Would come from spawner if available
+	}
+
+	status := "ok"
+	if !s.dockerAvailable {
+		status = "degraded"
+	}
+
+	health := HealthResponse{
+		Status: status,
+		Checks: checks,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
+	json.NewEncoder(w).Encode(health)
 }
 
 // handleGitHubEvent processes a GitHub webhook event.

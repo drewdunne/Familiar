@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -45,8 +46,118 @@ func TestServer_HealthEndpoint(t *testing.T) {
 		t.Errorf("GET /health status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	if rec.Body.String() != `{"status":"ok"}` {
-		t.Errorf("GET /health body = %q, want %q", rec.Body.String(), `{"status":"ok"}`)
+	// Parse the JSON response
+	var health HealthResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+		t.Fatalf("Failed to parse health response: %v", err)
+	}
+
+	// Check that the response has the expected structure
+	if health.Status != "ok" && health.Status != "degraded" {
+		t.Errorf("GET /health status = %q, want 'ok' or 'degraded'", health.Status)
+	}
+
+	if health.Checks == nil {
+		t.Error("GET /health checks is nil, want non-nil")
+	}
+
+	// Verify docker check exists in response
+	if _, ok := health.Checks["docker"]; !ok {
+		t.Error("GET /health missing 'docker' in checks")
+	}
+
+	// Verify active_agents check exists in response
+	if _, ok := health.Checks["active_agents"]; !ok {
+		t.Error("GET /health missing 'active_agents' in checks")
+	}
+}
+
+func TestServer_HealthEndpoint_ContentType(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+			Port: 8080,
+		},
+	}
+
+	srv := New(cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	contentType := rec.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("GET /health Content-Type = %q, want %q", contentType, "application/json")
+	}
+}
+
+func TestServer_HealthEndpoint_DegradedStatus(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+			Port: 8080,
+		},
+	}
+
+	srv := New(cfg)
+	// Simulate Docker being unavailable
+	srv.dockerAvailable = false
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET /health status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var health HealthResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+		t.Fatalf("Failed to parse health response: %v", err)
+	}
+
+	if health.Status != "degraded" {
+		t.Errorf("GET /health status = %q, want 'degraded' when Docker unavailable", health.Status)
+	}
+
+	dockerCheck, ok := health.Checks["docker"].(bool)
+	if !ok || dockerCheck {
+		t.Error("GET /health docker check should be false when Docker unavailable")
+	}
+}
+
+func TestServer_HealthEndpoint_OkStatus(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+			Port: 8080,
+		},
+	}
+
+	srv := New(cfg)
+	// Simulate Docker being available
+	srv.dockerAvailable = true
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	var health HealthResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+		t.Fatalf("Failed to parse health response: %v", err)
+	}
+
+	if health.Status != "ok" {
+		t.Errorf("GET /health status = %q, want 'ok' when Docker available", health.Status)
+	}
+
+	dockerCheck, ok := health.Checks["docker"].(bool)
+	if !ok || !dockerCheck {
+		t.Error("GET /health docker check should be true when Docker available")
 	}
 }
 
