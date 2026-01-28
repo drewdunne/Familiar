@@ -181,3 +181,75 @@ func TestSpawner_StopNonExistent(t *testing.T) {
 		t.Error("Stop() expected error for non-existent session")
 	}
 }
+
+func TestSpawner_CaptureAndStop(t *testing.T) {
+	// Skip if Docker not available
+	if os.Getenv("DOCKER_HOST") == "" && os.Getenv("CI") == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+			t.Skip("Docker not available")
+		}
+	}
+
+	spawner, err := NewSpawner(SpawnerConfig{
+		Image: "alpine:latest",
+	})
+	if err != nil {
+		t.Fatalf("NewSpawner() error = %v", err)
+	}
+	defer spawner.Close()
+
+	worktreeDir := t.TempDir()
+
+	// Spawn agent that produces output
+	session, err := spawner.Spawn(context.Background(), SpawnRequest{
+		ID:           "test-capture",
+		WorktreePath: worktreeDir,
+		WorkDir:      "/workspace",
+		Prompt:       "echo 'test log output'",
+	})
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+
+	// Create log file path
+	logPath := filepath.Join(t.TempDir(), "agent.log")
+
+	// Capture and stop
+	err = spawner.CaptureAndStop(context.Background(), session.ID, logPath)
+	if err != nil {
+		t.Fatalf("CaptureAndStop() error = %v", err)
+	}
+
+	// Verify log file was created
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		t.Error("Log file was not created")
+	}
+
+	// Verify session is removed
+	if _, ok := spawner.GetSession(session.ID); ok {
+		t.Error("Session should be removed after CaptureAndStop")
+	}
+}
+
+func TestSpawner_CaptureAndStop_NonExistent(t *testing.T) {
+	// Skip if Docker not available
+	if os.Getenv("DOCKER_HOST") == "" && os.Getenv("CI") == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+			t.Skip("Docker not available")
+		}
+	}
+
+	spawner, err := NewSpawner(SpawnerConfig{
+		Image: "alpine:latest",
+	})
+	if err != nil {
+		t.Fatalf("NewSpawner() error = %v", err)
+	}
+	defer spawner.Close()
+
+	// CaptureAndStop non-existent session should return error
+	err = spawner.CaptureAndStop(context.Background(), "non-existent-session", "/tmp/test.log")
+	if err == nil {
+		t.Error("CaptureAndStop() expected error for non-existent session")
+	}
+}

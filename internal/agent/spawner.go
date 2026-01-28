@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -197,4 +198,32 @@ func (s *Spawner) ActiveCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.sessions)
+}
+
+// CaptureAndStop captures container logs to a file and then stops the agent.
+func (s *Spawner) CaptureAndStop(ctx context.Context, sessionID string, logPath string) error {
+	session, ok := s.GetSession(sessionID)
+	if !ok {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	// Get container logs
+	logs, err := s.client.GetContainerLogs(ctx, session.ContainerID)
+	if err != nil {
+		return fmt.Errorf("getting container logs: %w", err)
+	}
+	defer logs.Close()
+
+	// Write to log file
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return fmt.Errorf("opening log file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, logs); err != nil {
+		return fmt.Errorf("writing logs: %w", err)
+	}
+
+	return s.Stop(ctx, sessionID)
 }
