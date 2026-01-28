@@ -92,7 +92,9 @@ func TestNormalizeGitLabEvent_Note(t *testing.T) {
 			"noteable_type": "MergeRequest"
 		},
 		"merge_request": {
-			"iid": 42
+			"iid": 42,
+			"source_branch": "feature",
+			"target_branch": "main"
 		},
 		"project": {
 			"path_with_namespace": "owner/repo",
@@ -118,6 +120,12 @@ func TestNormalizeGitLabEvent_Note(t *testing.T) {
 	if event.CommentBody != "Please fix this" {
 		t.Errorf("CommentBody = %q, want %q", event.CommentBody, "Please fix this")
 	}
+	if event.SourceBranch != "feature" {
+		t.Errorf("SourceBranch = %q, want %q", event.SourceBranch, "feature")
+	}
+	if event.TargetBranch != "main" {
+		t.Errorf("TargetBranch = %q, want %q", event.TargetBranch, "main")
+	}
 }
 
 func TestNormalizeGitLabEvent_Mention(t *testing.T) {
@@ -129,7 +137,9 @@ func TestNormalizeGitLabEvent_Mention(t *testing.T) {
 			"noteable_type": "MergeRequest"
 		},
 		"merge_request": {
-			"iid": 42
+			"iid": 42,
+			"source_branch": "feature",
+			"target_branch": "main"
 		},
 		"project": {
 			"path_with_namespace": "owner/repo",
@@ -152,6 +162,9 @@ func TestNormalizeGitLabEvent_Mention(t *testing.T) {
 	// Should be TypeMention because it contains @familiar
 	if event.Type != TypeMention {
 		t.Errorf("Type = %q, want %q", event.Type, TypeMention)
+	}
+	if event.SourceBranch != "feature" {
+		t.Errorf("SourceBranch = %q, want %q", event.SourceBranch, "feature")
 	}
 }
 

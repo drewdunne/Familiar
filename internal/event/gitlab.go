@@ -23,7 +23,9 @@ type gitLabPayload struct {
 		NoteableType string `json:"noteable_type"`
 	} `json:"object_attributes"`
 	MergeRequest struct {
-		IID int `json:"iid"`
+		IID          int    `json:"iid"`
+		SourceBranch string `json:"source_branch"`
+		TargetBranch string `json:"target_branch"`
 	} `json:"merge_request"`
 	Project struct {
 		PathWithNamespace string `json:"path_with_namespace"`
@@ -78,6 +80,8 @@ func NormalizeGitLabEvent(glEvent *webhook.GitLabEvent) (*Event, error) {
 			return nil, fmt.Errorf("note on non-MR not supported")
 		}
 		event.MRNumber = payload.MergeRequest.IID
+		event.SourceBranch = payload.MergeRequest.SourceBranch
+		event.TargetBranch = payload.MergeRequest.TargetBranch
 		event.CommentID = payload.ObjectAttributes.ID
 		event.CommentBody = payload.ObjectAttributes.Note
 		event.CommentAuthor = payload.User.Username
