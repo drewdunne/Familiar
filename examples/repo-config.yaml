@@ -1,0 +1,26 @@
+# .familiar/config.yaml - Repository-level configuration
+# Place this file in your repository to override server defaults
+
+# Override which events trigger Familiar
+events:
+  mr_opened: true
+  mr_comment: true
+  mr_updated: false  # Don't re-review on every push
+  mention: true
+
+# Override permissions for this repository
+permissions:
+  merge: "on_request"      # Allow merge when explicitly requested
+  approve: "never"         # Never auto-approve
+  push_commits: "always"   # Always allow pushing fixes
+  dismiss_reviews: "never" # Never dismiss reviews
+
+# Override prompts for this repository
+prompts:
+  mr_opened: |
+    Review this PR with focus on:
+    - Security vulnerabilities
+    - Performance implications
+    - Code style per our CONTRIBUTING.md
+
+    Be concise. Approve if no issues found.
