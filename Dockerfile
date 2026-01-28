@@ -18,7 +18,7 @@ COPY --from=builder /build/familiar /usr/local/bin/familiar
 # Create directories
 RUN mkdir -p /etc/familiar /var/log/familiar /var/cache/familiar
 
-EXPOSE 8080
+EXPOSE 7000
 
 ENTRYPOINT ["familiar"]
 CMD ["serve", "--config", "/etc/familiar/config.yaml"]

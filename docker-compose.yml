@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   familiar:
     build: .
     ports:
-      - "8080:8080"
+      - "7000:7000"
     volumes:
       - ./config.yaml:/etc/familiar/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
