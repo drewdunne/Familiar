@@ -9,20 +9,27 @@ import (
 	"github.com/drewdunne/familiar/internal/config"
 	"github.com/drewdunne/familiar/internal/event"
 	"github.com/drewdunne/familiar/internal/intent"
+	"github.com/drewdunne/familiar/internal/lca"
+	"github.com/drewdunne/familiar/internal/prompt"
+	"github.com/drewdunne/familiar/internal/registry"
 	"github.com/drewdunne/familiar/internal/repocache"
 )
 
 // AgentHandler handles events by spawning agents.
 type AgentHandler struct {
-	spawner   *agent.Spawner
-	repoCache *repocache.Cache
+	spawner       *agent.Spawner
+	repoCache     *repocache.Cache
+	registry      *registry.Registry
+	promptBuilder *prompt.Builder
 }
 
 // NewAgentHandler creates a new agent handler.
-func NewAgentHandler(spawner *agent.Spawner, repoCache *repocache.Cache) *AgentHandler {
+func NewAgentHandler(spawner *agent.Spawner, repoCache *repocache.Cache, reg *registry.Registry) *AgentHandler {
 	return &AgentHandler{
-		spawner:   spawner,
-		repoCache: repoCache,
+		spawner:       spawner,
+		repoCache:     repoCache,
+		registry:      reg,
+		promptBuilder: prompt.NewBuilder(),
 	}
 }
 
@@ -42,15 +49,36 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 		return fmt.Errorf("creating worktree: %w", err)
 	}
 
-	// Build prompt (Phase 6 will enhance this)
-	prompt := buildPrompt(evt, cfg, parsedIntent)
+	// Get changed files and calculate LCA for working directory
+	workDir := "/workspace"
+	provider := h.registry.Get(evt.Provider)
+	if provider != nil {
+		changedFiles, err := provider.GetChangedFiles(ctx, evt.RepoOwner, evt.RepoName, evt.MRNumber)
+		if err != nil {
+			log.Printf("warning: failed to get changed files: %v", err)
+		} else if len(changedFiles) > 0 {
+			// Extract file paths
+			filePaths := make([]string, len(changedFiles))
+			for i, f := range changedFiles {
+				filePaths[i] = f.Path
+			}
+			// Calculate LCA
+			lcaDir := lca.FindLCA(filePaths)
+			if lcaDir != "." {
+				workDir = "/workspace/" + lcaDir
+			}
+		}
+	}
+
+	// Build prompt using the prompt builder
+	agentPrompt := h.promptBuilder.Build(evt, cfg, parsedIntent)
 
 	// Spawn agent
 	_, err = h.spawner.Spawn(ctx, agent.SpawnRequest{
 		ID:           agentID,
 		WorktreePath: worktreePath,
-		WorkDir:      "/workspace",
-		Prompt:       prompt,
+		WorkDir:      workDir,
+		Prompt:       agentPrompt,
 	})
 	if err != nil {
 		// Cleanup worktree on failure
@@ -60,28 +88,7 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 		return fmt.Errorf("spawning agent: %w", err)
 	}
 
-	log.Printf("Spawned agent %s for %s/%s MR #%d", agentID, evt.RepoOwner, evt.RepoName, evt.MRNumber)
+	log.Printf("Spawned agent %s for %s/%s MR #%d (workDir: %s)", agentID, evt.RepoOwner, evt.RepoName, evt.MRNumber, workDir)
 	return nil
 }
 
-func buildPrompt(evt *event.Event, cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) string {
-	// Simple prompt for now - Phase 6 will build full prompt
-	var prompt string
-
-	switch evt.Type {
-	case event.TypeMROpened:
-		prompt = cfg.Prompts.MROpened
-	case event.TypeMRComment:
-		prompt = cfg.Prompts.MRComment
-	case event.TypeMRUpdated:
-		prompt = cfg.Prompts.MRUpdated
-	case event.TypeMention:
-		prompt = cfg.Prompts.Mention
-	}
-
-	if parsedIntent != nil && parsedIntent.Instructions != "" {
-		prompt += "\n\nUser instructions: " + parsedIntent.Instructions
-	}
-
-	return prompt
-}
