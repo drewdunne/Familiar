@@ -18,6 +18,8 @@ type Config struct {
 	Prompts     ServerPromptsConfig     `yaml:"prompts"`
 	Agents      AgentsConfig            `yaml:"agents"`
 	LLM         LLMConfig               `yaml:"llm"`
+	Concurrency ConcurrencyConfig       `yaml:"concurrency"`
+	RepoCache   RepoCacheConfig         `yaml:"repo_cache"`
 }
 
 // ServerEventsConfig controls which events are enabled at server level.
@@ -46,8 +48,22 @@ type ServerPromptsConfig struct {
 
 // AgentsConfig holds agent settings.
 type AgentsConfig struct {
-	TimeoutMinutes  int `yaml:"timeout_minutes"`
-	DebounceSeconds int `yaml:"debounce_seconds"`
+	TimeoutMinutes  int    `yaml:"timeout_minutes"`
+	DebounceSeconds int    `yaml:"debounce_seconds"`
+	Image           string `yaml:"image"`
+	ClaudeAuthDir   string `yaml:"claude_auth_dir"`
+}
+
+// ConcurrencyConfig holds concurrency limits.
+type ConcurrencyConfig struct {
+	MaxAgents int `yaml:"max_agents"`
+	QueueSize int `yaml:"queue_size"`
+}
+
+// RepoCacheConfig holds repo cache settings.
+type RepoCacheConfig struct {
+	Dir     string `yaml:"dir"`      // Container path for git operations
+	HostDir string `yaml:"host_dir"` // Host path for Docker bind mounts
 }
 
 // LLMConfig holds LLM/intent parsing configuration.
@@ -108,6 +124,18 @@ func DefaultConfig() *Config {
 		Logging: LoggingConfig{
 			Dir:           "/var/log/familiar",
 			RetentionDays: 30,
+		},
+		Concurrency: ConcurrencyConfig{
+			MaxAgents: 5,
+			QueueSize: 20,
+		},
+		RepoCache: RepoCacheConfig{
+			Dir: "./cache/repos",
+		},
+		Agents: AgentsConfig{
+			TimeoutMinutes:  30,
+			DebounceSeconds: 10,
+			Image:           "familiar-agent:latest",
 		},
 	}
 }

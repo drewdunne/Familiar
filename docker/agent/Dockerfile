@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine
+FROM node:22-alpine
 
 # Install dependencies
 RUN apk add --no-cache \
@@ -9,10 +9,8 @@ RUN apk add --no-cache \
     curl \
     bash
 
-# Install Claude Code CLI
-# Note: Update installation method based on actual Claude Code distribution
-RUN curl -fsSL https://claude.ai/install.sh | sh || \
-    echo "Claude Code installation placeholder - update when available"
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user for agent
 RUN adduser -D -h /home/agent -s /bin/bash agent

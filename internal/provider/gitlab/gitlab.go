@@ -151,3 +151,16 @@ func (p *GitLabProvider) GetComments(ctx context.Context, owner, repo string, nu
 	}
 	return result, nil
 }
+
+// AuthenticatedCloneURL returns a clone URL with embedded GitLab token.
+// Format: https://oauth2:TOKEN@gitlab.example.com/org/repo.git
+func (p *GitLabProvider) AuthenticatedCloneURL(rawURL string) (string, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("parsing URL: %w", err)
+	}
+
+	// Embed token as password with oauth2 username
+	parsed.User = url.UserPassword("oauth2", p.token)
+	return parsed.String(), nil
+}

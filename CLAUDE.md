@@ -122,6 +122,28 @@ go fmt ./...                          # Format code
 ./familiar serve --config config.yaml  # Run the server
 ```
 
+### Logs and debugging
+
+**Log locations:**
+- **Local development:** `./logs/` (configured in `config.yaml` → `logging.dir`)
+- **Docker:** `docker logs familiar-familiar-1` (stdout/stderr)
+- **Default path:** `/var/log/familiar` (if not overridden)
+
+**Log directory structure:**
+```
+logs/
+  <owner>/
+    <repo>/
+      <mr_number>/
+        <timestamp>-<event_type>-<agent_id>.log
+```
+
+**Viewing Docker container logs:**
+```bash
+docker logs familiar-familiar-1 2>&1 | tail -100   # Recent logs
+docker logs -f familiar-familiar-1                 # Follow logs
+```
+
 ## Project Structure
 
 ```

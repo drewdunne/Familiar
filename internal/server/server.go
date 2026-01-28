@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/drewdunne/familiar/internal/config"
+	"github.com/drewdunne/familiar/internal/event"
 	"github.com/drewdunne/familiar/internal/metrics"
 	"github.com/drewdunne/familiar/internal/webhook"
 )
@@ -23,9 +25,10 @@ type Server struct {
 	cfg             *config.Config
 	mux             *http.ServeMux
 	httpServer      *httpServer
-	httpServerMu    sync.RWMutex // protects httpServer pointer
+	httpServerMu    sync.RWMutex  // protects httpServer pointer
 	ready           chan struct{} // closed when server is ready to accept connections
 	dockerAvailable bool
+	eventRouter     *event.Router
 }
 
 // New creates a new Server with the given config.
@@ -35,6 +38,20 @@ func New(cfg *config.Config) *Server {
 		mux:             http.NewServeMux(),
 		ready:           make(chan struct{}),
 		dockerAvailable: checkDockerAvailable(),
+	}
+	s.routes()
+	return s
+}
+
+// NewWithRouter creates a new Server with an injected event router.
+// This allows dependency injection for testing and custom event handling.
+func NewWithRouter(cfg *config.Config, router *event.Router) *Server {
+	s := &Server{
+		cfg:             cfg,
+		mux:             http.NewServeMux(),
+		ready:           make(chan struct{}),
+		dockerAvailable: checkDockerAvailable(),
+		eventRouter:     router,
 	}
 	s.routes()
 	return s
@@ -110,9 +127,27 @@ func (s *Server) handleGitHubEvent(event *webhook.GitHubEvent) error {
 }
 
 // handleGitLabEvent processes a GitLab webhook event.
-func (s *Server) handleGitLabEvent(event *webhook.GitLabEvent) error {
-	log.Printf("Received GitLab event: %s, kind: %s", event.EventType, event.ObjectKind)
-	// TODO: Route to event processor in future phases
+func (s *Server) handleGitLabEvent(glEvent *webhook.GitLabEvent) error {
+	log.Printf("Received GitLab event: %s, kind: %s", glEvent.EventType, glEvent.ObjectKind)
+
+	// If no router configured, just log and return (backwards compatible)
+	if s.eventRouter == nil {
+		return nil
+	}
+
+	// Normalize the webhook event
+	normalizedEvent, err := event.NormalizeGitLabEvent(glEvent)
+	if err != nil {
+		log.Printf("Failed to normalize GitLab event: %v", err)
+		return nil // Don't fail the webhook, just log
+	}
+
+	// Route the event
+	if err := s.eventRouter.Route(context.Background(), normalizedEvent); err != nil {
+		log.Printf("Failed to route event: %v", err)
+		return nil // Don't fail the webhook, just log
+	}
+
 	return nil
 }
 

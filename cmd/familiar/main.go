@@ -7,7 +7,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/drewdunne/familiar/internal/agent"
 	"github.com/drewdunne/familiar/internal/config"
+	"github.com/drewdunne/familiar/internal/event"
+	"github.com/drewdunne/familiar/internal/handler"
+	"github.com/drewdunne/familiar/internal/registry"
+	"github.com/drewdunne/familiar/internal/repocache"
 	"github.com/drewdunne/familiar/internal/server"
 	"github.com/joho/godotenv"
 )
@@ -63,8 +68,39 @@ func runServe(args []string) {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Create and start server
-	srv := server.New(cfg)
+	// Create repo cache
+	var repoCache *repocache.Cache
+	if cfg.RepoCache.HostDir != "" {
+		// Running in container with separate host/container paths
+		repoCache = repocache.NewWithHostDir(cfg.RepoCache.Dir, cfg.RepoCache.HostDir)
+	} else {
+		// Running directly on host
+		repoCache = repocache.New(cfg.RepoCache.Dir)
+	}
+
+	// Create provider registry
+	reg := registry.New(cfg)
+
+	// Create agent spawner
+	spawner, err := agent.NewSpawner(agent.SpawnerConfig{
+		Image:          cfg.Agents.Image,
+		ClaudeAuthDir:  cfg.Agents.ClaudeAuthDir,
+		MaxAgents:      cfg.Concurrency.MaxAgents,
+		TimeoutMinutes: cfg.Agents.TimeoutMinutes,
+	})
+	if err != nil {
+		log.Fatalf("Failed to create agent spawner: %v", err)
+	}
+	defer spawner.Close()
+
+	// Create agent handler
+	agentHandler := handler.NewAgentHandler(spawner, repoCache, reg)
+
+	// Create event router
+	router := event.NewRouter(cfg, agentHandler.Handle, nil)
+
+	// Create and start server with router
+	srv := server.NewWithRouter(cfg, router)
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 
 	log.Printf("Starting Familiar server on %s", addr)

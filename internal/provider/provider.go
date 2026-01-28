@@ -21,4 +21,8 @@ type Provider interface {
 
 	// GetComments fetches comments on a merge request.
 	GetComments(ctx context.Context, owner, repo string, number int) ([]Comment, error)
+
+	// AuthenticatedCloneURL returns a clone URL with embedded credentials.
+	// The rawURL is the original clone URL from the webhook payload.
+	AuthenticatedCloneURL(rawURL string) (string, error)
 }

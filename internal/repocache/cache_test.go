@@ -131,3 +131,22 @@ func TestCache_RepoPath(t *testing.T) {
 		t.Errorf("RepoPath() = %q, want %q", path, expected)
 	}
 }
+
+func TestNew_ConvertsRelativePathToAbsolute(t *testing.T) {
+	// Create cache with relative path
+	cache := New("./cache/repos")
+
+	// Get a path from the cache
+	path := cache.RepoPath("owner", "repo")
+
+	// Path should be absolute (start with /)
+	if !filepath.IsAbs(path) {
+		t.Errorf("RepoPath() returned relative path %q, want absolute path", path)
+	}
+
+	// WorktreePath should also be absolute
+	wtPath := cache.WorktreePath("owner", "repo", "agent-123")
+	if !filepath.IsAbs(wtPath) {
+		t.Errorf("WorktreePath() returned relative path %q, want absolute path", wtPath)
+	}
+}

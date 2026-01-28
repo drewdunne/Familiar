@@ -7,14 +7,17 @@ services:
       - ./config.yaml:/etc/familiar/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - familiar-logs:/var/log/familiar
-      - familiar-cache:/var/cache/familiar
+      - ${REPO_CACHE_DIR}:/cache
     environment:
       - GITHUB_TOKEN
       - GITHUB_WEBHOOK_SECRET
       - GITLAB_TOKEN
       - GITLAB_WEBHOOK_SECRET
+      - REPO_CACHE_DIR
+      - LOG_DIR
+      - CLAUDE_AUTH_DIR
+      - AGENT_IMAGE
     restart: unless-stopped
 
 volumes:
   familiar-logs:
-  familiar-cache:

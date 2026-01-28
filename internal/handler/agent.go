@@ -38,8 +38,20 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 	// Generate unique agent ID
 	agentID := fmt.Sprintf("%s-%s-%d-%d", evt.Provider, evt.RepoName, evt.MRNumber, evt.Timestamp.Unix())
 
+	// Get authenticated clone URL from provider
+	cloneURL := evt.RepoURL
+	provider := h.registry.Get(evt.Provider)
+	if provider != nil {
+		authURL, err := provider.AuthenticatedCloneURL(evt.RepoURL)
+		if err != nil {
+			log.Printf("warning: failed to get authenticated URL, using raw URL: %v", err)
+		} else {
+			cloneURL = authURL
+		}
+	}
+
 	// Ensure repo is cached and create worktree
-	_, err := h.repoCache.EnsureRepo(ctx, evt.RepoURL, evt.RepoOwner, evt.RepoName)
+	_, err := h.repoCache.EnsureRepo(ctx, cloneURL, evt.RepoOwner, evt.RepoName)
 	if err != nil {
 		return fmt.Errorf("ensuring repo: %w", err)
 	}
@@ -51,7 +63,6 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 
 	// Get changed files and calculate LCA for working directory
 	workDir := "/workspace"
-	provider := h.registry.Get(evt.Provider)
 	if provider != nil {
 		changedFiles, err := provider.GetChangedFiles(ctx, evt.RepoOwner, evt.RepoName, evt.MRNumber)
 		if err != nil {
@@ -73,10 +84,11 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 	// Build prompt using the prompt builder
 	agentPrompt := h.promptBuilder.Build(evt, cfg, parsedIntent)
 
-	// Spawn agent
+	// Spawn agent - use host path for Docker bind mount
+	hostWorktreePath := h.repoCache.HostPath(worktreePath)
 	_, err = h.spawner.Spawn(ctx, agent.SpawnRequest{
 		ID:           agentID,
-		WorktreePath: worktreePath,
+		WorktreePath: hostWorktreePath,
 		WorkDir:      workDir,
 		Prompt:       agentPrompt,
 	})

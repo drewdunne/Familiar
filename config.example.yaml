@@ -6,7 +6,7 @@ server:
   port: 7000
 
 logging:
-  dir: "/var/log/familiar"
+  dir: "${LOG_DIR}"
   retention_days: 30
 
 concurrency:
@@ -16,9 +16,14 @@ concurrency:
 agents:
   timeout_minutes: 30
   debounce_seconds: 10
+  image: "${AGENT_IMAGE}"
+  claude_auth_dir: "${CLAUDE_AUTH_DIR}"
 
 repo_cache:
-  dir: "/var/cache/familiar/repos"
+  # Container path where the cache is mounted (for git operations)
+  dir: "/cache"
+  # Absolute HOST path (for agent container bind mounts)
+  host_dir: "${REPO_CACHE_DIR}"
 
 providers:
   github:

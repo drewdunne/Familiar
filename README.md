@@ -324,20 +324,45 @@ The easiest way to deploy Familiar is using Docker Compose:
    # Edit config.yaml with your settings
    ```
 
-2. Set environment variables:
+2. Build the agent container image:
+   ```bash
+   docker build -t familiar-agent:latest -f docker/agent/Dockerfile .
+   ```
+
+   This builds a container with Claude Code CLI installed. Agents run in these
+   containers with your Claude authentication mounted from the host.
+
+3. Set environment variables:
    ```bash
    export GITHUB_TOKEN="your-github-token"
    export GITHUB_WEBHOOK_SECRET="your-webhook-secret"
    export GITLAB_TOKEN="your-gitlab-token"
    export GITLAB_WEBHOOK_SECRET="your-webhook-secret"
+
+   # REQUIRED: Absolute path on the HOST for repo cache
+   # Agent containers mount this directory, so it must be a host path
+   export REPO_CACHE_DIR="/home/youruser/familiar-cache"
+
+   # Log directory (use /var/log/familiar for Docker, matches named volume)
+   export LOG_DIR="/var/log/familiar"
+
+   # Claude CLI auth directory (host path, mounted into agent containers)
+   export CLAUDE_AUTH_DIR="/home/youruser/.claude"
+
+   # Agent container image (use the image built in step 2)
+   export AGENT_IMAGE="familiar-agent:latest"
    ```
 
-3. Start the service:
+   **Important:** `REPO_CACHE_DIR` must be an absolute path on your host machine.
+   Familiar spawns agent containers that mount this directory directly from the
+   host filesystem (via the Docker socket), so relative paths won't work.
+
+4. Start the service:
    ```bash
    docker compose up -d
    ```
 
-4. View logs:
+5. View logs:
    ```bash
    docker compose logs -f
    ```

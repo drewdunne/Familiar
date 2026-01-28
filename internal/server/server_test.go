@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/drewdunne/familiar/internal/config"
+	"github.com/drewdunne/familiar/internal/event"
+	"github.com/drewdunne/familiar/internal/intent"
 	"github.com/drewdunne/familiar/internal/metrics"
 )
 
@@ -336,5 +339,98 @@ func TestServer_MetricsEndpoint_ReflectsIncrements(t *testing.T) {
 	}
 	if m.WebhooksProcessed != 2 {
 		t.Errorf("WebhooksProcessed = %d, want 2", m.WebhooksProcessed)
+	}
+}
+
+func TestServer_GitLabWebhook_RoutesToEventHandler(t *testing.T) {
+	// Track whether the handler was called
+	handlerCalled := false
+	var receivedEvent *event.Event
+
+	// Create a mock handler that records calls
+	mockHandler := func(ctx context.Context, evt *event.Event, cfg *config.MergedConfig, intent *intent.ParsedIntent) error {
+		handlerCalled = true
+		receivedEvent = evt
+		return nil
+	}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+			Port: 8080,
+		},
+		Providers: config.ProvidersConfig{
+			GitLab: config.GitLabConfig{
+				WebhookSecret: "test-secret",
+			},
+		},
+		Events: config.ServerEventsConfig{
+			MRComment: true,
+		},
+		Agents: config.AgentsConfig{
+			DebounceSeconds: 0, // Disable debounce for testing
+		},
+	}
+
+	// Create router with mock handler
+	router := event.NewRouter(cfg, mockHandler, nil)
+
+	// Create server with injected router
+	srv := NewWithRouter(cfg, router)
+
+	// Send a valid GitLab Note Hook webhook
+	payload := `{
+		"object_kind": "note",
+		"object_attributes": {
+			"id": 123,
+			"note": "Please fix this bug",
+			"noteable_type": "MergeRequest"
+		},
+		"merge_request": {
+			"iid": 42
+		},
+		"project": {
+			"path_with_namespace": "myorg/myrepo",
+			"git_http_url": "https://gitlab.com/myorg/myrepo.git"
+		},
+		"user": {
+			"username": "reviewer"
+		}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/gitlab", strings.NewReader(payload))
+	req.Header.Set("X-Gitlab-Token", "test-secret")
+	req.Header.Set("X-Gitlab-Event", "Note Hook")
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("POST /webhook/gitlab status = %d, want %d, body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	// Verify handler was called
+	if !handlerCalled {
+		t.Fatal("Event handler was not called - routing is not wired up")
+	}
+
+	// Verify event was normalized correctly
+	if receivedEvent == nil {
+		t.Fatal("Received event is nil")
+	}
+	if receivedEvent.Type != event.TypeMRComment {
+		t.Errorf("Event type = %s, want %s", receivedEvent.Type, event.TypeMRComment)
+	}
+	if receivedEvent.MRNumber != 42 {
+		t.Errorf("MR number = %d, want 42", receivedEvent.MRNumber)
+	}
+	if receivedEvent.RepoOwner != "myorg" {
+		t.Errorf("RepoOwner = %s, want myorg", receivedEvent.RepoOwner)
+	}
+	if receivedEvent.RepoName != "myrepo" {
+		t.Errorf("RepoName = %s, want myrepo", receivedEvent.RepoName)
+	}
+	if receivedEvent.CommentBody != "Please fix this bug" {
+		t.Errorf("CommentBody = %s, want 'Please fix this bug'", receivedEvent.CommentBody)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/drewdunne/familiar/internal/provider"
 	"github.com/google/go-github/v60/github"
@@ -145,4 +146,17 @@ func (p *GitHubProvider) GetComments(ctx context.Context, owner, repo string, nu
 		}
 	}
 	return result, nil
+}
+
+// AuthenticatedCloneURL returns a clone URL with embedded GitHub token.
+// Format: https://x-access-token:TOKEN@github.com/org/repo.git
+func (p *GitHubProvider) AuthenticatedCloneURL(rawURL string) (string, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("parsing URL: %w", err)
+	}
+
+	// Embed token as password with x-access-token username (GitHub convention)
+	parsed.User = url.UserPassword("x-access-token", p.token)
+	return parsed.String(), nil
 }

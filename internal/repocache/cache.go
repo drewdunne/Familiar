@@ -11,13 +11,25 @@ import (
 
 // Cache manages bare git repo clones.
 type Cache struct {
-	baseDir string
+	baseDir string // Container path for git operations
+	hostDir string // Host path for Docker bind mounts
 	mu      sync.Mutex
 }
 
 // New creates a new repo cache at the given directory.
+// Converts relative paths to absolute to ensure Docker bind mounts work correctly.
 func New(baseDir string) *Cache {
-	return &Cache{baseDir: baseDir}
+	absPath, err := filepath.Abs(baseDir)
+	if err != nil {
+		absPath = baseDir // fallback to original if conversion fails
+	}
+	return &Cache{baseDir: absPath, hostDir: absPath}
+}
+
+// NewWithHostDir creates a new repo cache with separate container and host paths.
+// Use this when running inside a container where the paths differ.
+func NewWithHostDir(containerDir, hostDir string) *Cache {
+	return &Cache{baseDir: containerDir, hostDir: hostDir}
 }
 
 // EnsureRepo ensures a bare clone of the repo exists and is up to date.
@@ -100,4 +112,18 @@ func (c *Cache) RemoveWorktree(ctx context.Context, owner, repo, worktreeID stri
 // WorktreePath returns the path where a worktree would be created.
 func (c *Cache) WorktreePath(owner, repo, worktreeID string) string {
 	return filepath.Join(c.RepoPath(owner, repo), "worktrees-data", worktreeID)
+}
+
+// HostPath converts a container path to the equivalent host path.
+// Use this when passing paths to Docker for bind mounts.
+func (c *Cache) HostPath(containerPath string) string {
+	if c.hostDir == c.baseDir {
+		return containerPath // No translation needed
+	}
+	// Replace the base dir prefix with the host dir
+	rel, err := filepath.Rel(c.baseDir, containerPath)
+	if err != nil {
+		return containerPath // Fallback to original
+	}
+	return filepath.Join(c.hostDir, rel)
 }
