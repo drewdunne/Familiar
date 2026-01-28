@@ -91,7 +91,8 @@
       "Bash(git -C /home/drewdunne/repos/Familiar/.worktrees/phase-5-docker merge feature/phase-7-logging --no-edit)",
       "Bash(git -C /home/drewdunne/repos/Familiar/.worktrees/phase-8-deployment log --oneline 4241a1f..HEAD)",
       "Bash(git -C /home/drewdunne/repos/Familiar/.worktrees/phase-5-docker merge feature/phase-8-deployment --no-edit)",
-      "Bash(go fmt:*)"
+      "Bash(go fmt:*)",
+      "Bash(go version:*)"
     ]
   }
 }

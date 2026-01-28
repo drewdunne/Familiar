@@ -21,6 +21,55 @@ Familiar listens for webhooks from GitLab and GitHub, then spawns isolated Claud
 - Claude Code CLI (authenticated with Max subscription)
 - GitHub and/or GitLab account with API tokens
 
+## Network Setup
+
+Familiar needs to receive webhooks from your Git provider. How you expose it depends on your setup:
+
+### Option 1: Tailscale (Self-Hosted Git Provider)
+
+If your GitLab/GitHub instance is on your Tailscale network, Familiar can be reached directly via its Tailscale hostname or IP. No public exposure needed.
+
+```bash
+# Find your Tailscale hostname
+tailscale status
+
+# Webhook URL format
+http://<tailscale-hostname>:7000/webhook/gitlab
+http://<tailscale-hostname>:7000/webhook/github
+
+# Example
+http://dev:7000/webhook/gitlab
+http://100.79.249.93:7000/webhook/gitlab
+```
+
+### Option 2: Tailscale Funnel (GitLab.com / GitHub.com)
+
+If using GitLab.com or GitHub.com (SaaS), you need to expose Familiar to the public internet. Tailscale Funnel provides a secure way to do this.
+
+```bash
+# Enable Funnel (one-time setup via Tailscale admin console)
+# Then expose port 7000
+tailscale funnel 7000
+
+# This gives you a public URL like:
+# https://<machine>.<tailnet>.ts.net
+
+# Webhook URL format
+https://<machine>.<tailnet>.ts.net/webhook/gitlab
+https://<machine>.<tailnet>.ts.net/webhook/github
+```
+
+### Option 3: ngrok or Similar
+
+Alternatively, use ngrok or another tunneling service:
+
+```bash
+ngrok http 7000
+
+# Use the generated URL for webhooks
+https://<random>.ngrok.io/webhook/gitlab
+```
+
 ## Quick Start
 
 ```bash
@@ -80,7 +129,7 @@ export GITHUB_TOKEN="ghp_your_token_here"
 1. Navigate to your repository on GitHub
 2. Click **Settings** > **Webhooks** > **Add webhook**
 3. Configure the webhook:
-   - **Payload URL**: `https://your-server.com/webhook/github`
+   - **Payload URL**: Your Familiar URL + `/webhook/github` (see [Network Setup](#network-setup))
    - **Content type**: `application/json`
    - **Secret**: Generate a secure secret and save it (you'll need this for `GITHUB_WEBHOOK_SECRET`)
    - **SSL verification**: Enable (recommended for production)
@@ -137,7 +186,7 @@ export GITLAB_TOKEN="glpat-your_token_here"
 1. Navigate to your project on GitLab
 2. Click **Settings** > **Webhooks**
 3. Configure the webhook:
-   - **URL**: `https://your-server.com/webhook/gitlab`
+   - **URL**: Your Familiar URL + `/webhook/gitlab` (see [Network Setup](#network-setup))
    - **Secret token**: Generate a secure secret and save it (you'll need this for `GITLAB_WEBHOOK_SECRET`)
    - **Trigger events**: Select the following:
      - **Merge request events** - For MR opened, updated, and merged events

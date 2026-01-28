@@ -43,6 +43,7 @@ familiar.env
 logs/
 
 # Local config overrides
+config.yaml
 config.local.yaml
 
 # Build artifacts
