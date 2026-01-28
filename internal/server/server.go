@@ -10,8 +10,9 @@ import (
 
 // Server is the HTTP server for Familiar.
 type Server struct {
-	cfg *config.Config
-	mux *http.ServeMux
+	cfg        *config.Config
+	mux        *http.ServeMux
+	httpServer *httpServer
 }
 
 // New creates a new Server with the given config.
