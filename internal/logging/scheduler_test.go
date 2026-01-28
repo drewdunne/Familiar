@@ -23,6 +23,48 @@ func TestCleanupScheduler_StartStop(t *testing.T) {
 	scheduler.Stop()
 }
 
+func TestCleanupScheduler_DoubleStop(t *testing.T) {
+	baseDir := t.TempDir()
+	cleaner := NewCleaner(baseDir, 30)
+	scheduler := NewCleanupScheduler(cleaner, 100*time.Millisecond)
+
+	scheduler.Start()
+
+	// Give the goroutine time to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Double stop should not panic (idempotent)
+	scheduler.Stop()
+	scheduler.Stop()
+}
+
+func TestCleanupScheduler_InitialCleanup(t *testing.T) {
+	baseDir := t.TempDir()
+
+	// Create an old file that will be cleaned up
+	dir := filepath.Join(baseDir, "owner", "repo", "1")
+	os.MkdirAll(dir, 0755)
+	oldFile := filepath.Join(dir, "old.log")
+	os.WriteFile(oldFile, []byte("old"), 0644)
+	os.Chtimes(oldFile, time.Now().AddDate(0, 0, -60), time.Now().AddDate(0, 0, -60))
+
+	cleaner := NewCleaner(baseDir, 30)
+	// Use a long interval to ensure cleanup happens from initial run, not scheduled
+	scheduler := NewCleanupScheduler(cleaner, 10*time.Second)
+
+	scheduler.Start()
+
+	// Wait for initial cleanup to run (should be immediate)
+	time.Sleep(50 * time.Millisecond)
+
+	scheduler.Stop()
+
+	// Verify the old file was cleaned up by initial cleanup
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Error("Old file should have been deleted by initial cleanup")
+	}
+}
+
 func TestCleanupScheduler_CleanupCalled(t *testing.T) {
 	baseDir := t.TempDir()
 
@@ -89,30 +131,43 @@ func TestCleanupScheduler_MultipleIntervals(t *testing.T) {
 	}
 }
 
-func TestCleanupScheduler_StopPreventsCleanup(t *testing.T) {
+func TestCleanupScheduler_StopPreventsScheduledCleanup(t *testing.T) {
 	baseDir := t.TempDir()
 
-	// Create an old file
+	// Create the directory structure but no old files yet
 	dir := filepath.Join(baseDir, "owner", "repo", "1")
 	os.MkdirAll(dir, 0755)
-	oldFile := filepath.Join(dir, "old.log")
-	os.WriteFile(oldFile, []byte("old"), 0644)
-	os.Chtimes(oldFile, time.Now().AddDate(0, 0, -60), time.Now().AddDate(0, 0, -60))
 
 	cleaner := NewCleaner(baseDir, 30)
-	scheduler := NewCleanupScheduler(cleaner, 100*time.Millisecond)
+	// Use a long interval so scheduled cleanup won't run during our test
+	scheduler := NewCleanupScheduler(cleaner, 500*time.Millisecond)
 
 	scheduler.Start()
 
-	// Stop immediately before cleanup runs
+	// Wait for initial cleanup to complete (it runs in a goroutine)
+	// Note: cleanEmptyDirs() runs multiple passes, so we need a generous wait
+	time.Sleep(200 * time.Millisecond)
+
+	// Stop before any scheduled cleanup runs
 	scheduler.Stop()
 
-	// Wait to ensure no cleanup runs after stop
-	time.Sleep(150 * time.Millisecond)
+	// Recreate the directory since initial cleanup may have removed it (it was empty)
+	os.MkdirAll(dir, 0755)
 
-	// File should still exist since we stopped before cleanup could run
+	// Now create an old file after stop - this file should NOT be cleaned up
+	// because the scheduler is stopped and initial cleanup already finished
+	oldFile := filepath.Join(dir, "old.log")
+	if err := os.WriteFile(oldFile, []byte("old"), 0644); err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	os.Chtimes(oldFile, time.Now().AddDate(0, 0, -60), time.Now().AddDate(0, 0, -60))
+
+	// Wait to verify no cleanup runs
+	time.Sleep(100 * time.Millisecond)
+
+	// File should still exist since scheduler was stopped before this file was created
 	if _, err := os.Stat(oldFile); os.IsNotExist(err) {
-		t.Error("File should still exist since scheduler was stopped before cleanup")
+		t.Error("File should still exist since scheduler was stopped")
 	}
 }
 
