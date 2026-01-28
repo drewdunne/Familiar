@@ -1,0 +1,24 @@
+[Unit]
+Description=Familiar - Git webhook to Claude Code bridge
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=familiar
+Group=familiar
+ExecStart=/usr/local/bin/familiar serve --config /etc/familiar/config.yaml
+Restart=on-failure
+RestartSec=5
+
+# Environment
+EnvironmentFile=-/etc/familiar/env
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/familiar /var/cache/familiar
+
+[Install]
+WantedBy=multi-user.target
