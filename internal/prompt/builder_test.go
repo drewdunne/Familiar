@@ -133,3 +133,133 @@ func TestBuilder_Build_AllEventTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestBuilder_Build_UnknownEventType(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:         event.Type("unknown"),
+		MRNumber:     1,
+		SourceBranch: "feature",
+		TargetBranch: "main",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MROpened: "opened prompt",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "never",
+			PushCommits: "never",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	// Should still contain context even with unknown event type
+	if !strings.Contains(prompt, "MR #1") {
+		t.Error("Prompt should contain MR number")
+	}
+}
+
+func TestBuilder_Build_AlwaysPermissions(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:         event.TypeMROpened,
+		MRNumber:     1,
+		SourceBranch: "feature",
+		TargetBranch: "main",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MROpened: "Review",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "always",
+			PushCommits: "always",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	if !strings.Contains(prompt, "SHOULD merge") {
+		t.Error("Prompt should indicate merge is allowed")
+	}
+	if !strings.Contains(prompt, "SHOULD push") {
+		t.Error("Prompt should indicate push is allowed")
+	}
+}
+
+func TestBuilder_Build_OnRequestWithoutRequest(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:         event.TypeMROpened,
+		MRNumber:     1,
+		SourceBranch: "feature",
+		TargetBranch: "main",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MROpened: "Review",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "on_request",
+			PushCommits: "on_request",
+		},
+	}
+
+	// Intent without merge action
+	parsedIntent := &intent.ParsedIntent{
+		Instructions:     "Just review",
+		RequestedActions: []intent.Action{},
+	}
+
+	prompt := builder.Build(evt, cfg, parsedIntent)
+
+	if !strings.Contains(prompt, "must NOT merge (not requested)") {
+		t.Error("Prompt should indicate merge is not requested")
+	}
+	if !strings.Contains(prompt, "must NOT push commits (not requested)") {
+		t.Error("Prompt should indicate push is not requested")
+	}
+}
+
+func TestBuilder_Build_OnRequestWithPushRequested(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:         event.TypeMROpened,
+		MRNumber:     1,
+		SourceBranch: "feature",
+		TargetBranch: "main",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MROpened: "Review",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "on_request",
+			PushCommits: "on_request",
+		},
+	}
+
+	// Intent with merge action (which enables push)
+	parsedIntent := &intent.ParsedIntent{
+		Instructions:     "Fix and merge",
+		RequestedActions: []intent.Action{intent.ActionMerge},
+	}
+
+	prompt := builder.Build(evt, cfg, parsedIntent)
+
+	if !strings.Contains(prompt, "MAY push commits") {
+		t.Error("Prompt should indicate push is allowed when merge is requested")
+	}
+	if !strings.Contains(prompt, "MAY merge") {
+		t.Error("Prompt should indicate merge is allowed")
+	}
+}
