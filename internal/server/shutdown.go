@@ -23,13 +23,17 @@ type httpServer struct {
 // Shutdown gracefully shuts down the server.
 // If the server hasn't been started, this is a no-op.
 func (s *Server) Shutdown(ctx context.Context) error {
-	if s.httpServer == nil {
+	s.httpServerMu.RLock()
+	hs := s.httpServer
+	s.httpServerMu.RUnlock()
+
+	if hs == nil {
 		return nil
 	}
 
-	s.httpServer.mu.RLock()
-	server := s.httpServer.server
-	s.httpServer.mu.RUnlock()
+	hs.mu.RLock()
+	server := hs.server
+	hs.mu.RUnlock()
 
 	if server == nil {
 		return nil
@@ -41,18 +45,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // Addr returns the address the server is listening on.
 // Returns empty string if the server hasn't been started.
 func (s *Server) Addr() string {
-	if s.httpServer == nil {
+	s.httpServerMu.RLock()
+	hs := s.httpServer
+	s.httpServerMu.RUnlock()
+
+	if hs == nil {
 		return ""
 	}
 
-	s.httpServer.mu.RLock()
-	defer s.httpServer.mu.RUnlock()
+	hs.mu.RLock()
+	defer hs.mu.RUnlock()
 
-	if s.httpServer.listener == nil {
+	if hs.listener == nil {
 		return ""
 	}
 
-	return s.httpServer.listener.Addr().String()
+	return hs.listener.Addr().String()
 }
 
 // ListenAndServeWithShutdown starts the server with graceful shutdown handling.
@@ -67,12 +75,16 @@ func (s *Server) ListenAndServeWithShutdown() error {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 
-	s.httpServer = &httpServer{
+	hs := &httpServer{
 		server: &http.Server{
 			Handler: s.Handler(),
 		},
 		listener: listener,
 	}
+
+	s.httpServerMu.Lock()
+	s.httpServer = hs
+	s.httpServerMu.Unlock()
 
 	// Channel for shutdown signals
 	shutdown := make(chan os.Signal, 1)
@@ -82,7 +94,7 @@ func (s *Server) ListenAndServeWithShutdown() error {
 	serverDone := make(chan error, 1)
 
 	go func() {
-		if err := s.httpServer.server.Serve(listener); err != http.ErrServerClosed {
+		if err := hs.server.Serve(listener); err != http.ErrServerClosed {
 			serverDone <- err
 			return
 		}
@@ -90,6 +102,9 @@ func (s *Server) ListenAndServeWithShutdown() error {
 	}()
 
 	log.Printf("Server started on %s", listener.Addr().String())
+
+	// Signal that server is ready
+	close(s.ready)
 
 	// Wait for shutdown signal or programmatic shutdown
 	select {
@@ -107,7 +122,7 @@ func (s *Server) ListenAndServeWithShutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := s.httpServer.server.Shutdown(ctx); err != nil {
+	if err := hs.server.Shutdown(ctx); err != nil {
 		log.Printf("Shutdown error: %v", err)
 		return err
 	}

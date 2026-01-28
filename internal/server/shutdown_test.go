@@ -27,8 +27,12 @@ func TestServer_Shutdown(t *testing.T) {
 		errCh <- srv.ListenAndServeWithShutdown()
 	}()
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	select {
+	case <-srv.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Server did not become ready in time")
+	}
 
 	// Programmatic shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -66,8 +70,12 @@ func TestServer_ShutdownOnSignal(t *testing.T) {
 		errCh <- srv.ListenAndServeWithShutdown()
 	}()
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	select {
+	case <-srv.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Server did not become ready in time")
+	}
 
 	// Send SIGINT to trigger shutdown
 	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
@@ -108,8 +116,12 @@ func TestServer_ShutdownWithActiveRequests(t *testing.T) {
 		errCh <- srv.ListenAndServeWithShutdown()
 	}()
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	select {
+	case <-srv.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Server did not become ready in time")
+	}
 
 	// Get the actual server address
 	addr := srv.Addr()
@@ -183,8 +195,12 @@ func TestServer_Addr(t *testing.T) {
 		errCh <- srv.ListenAndServeWithShutdown()
 	}()
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	select {
+	case <-srv.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Server did not become ready in time")
+	}
 
 	// After starting, Addr should return the actual address
 	addr := srv.Addr()
@@ -244,8 +260,12 @@ func TestServer_ShutdownTimeout(t *testing.T) {
 		errCh <- srv.ListenAndServeWithShutdown()
 	}()
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	select {
+	case <-srv.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Server did not become ready in time")
+	}
 
 	// Get the actual server address
 	addr := srv.Addr()

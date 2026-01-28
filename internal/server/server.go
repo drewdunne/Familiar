@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"sync"
 
 	"github.com/drewdunne/familiar/internal/config"
 	"github.com/drewdunne/familiar/internal/metrics"
@@ -22,6 +23,8 @@ type Server struct {
 	cfg             *config.Config
 	mux             *http.ServeMux
 	httpServer      *httpServer
+	httpServerMu    sync.RWMutex // protects httpServer pointer
+	ready           chan struct{} // closed when server is ready to accept connections
 	dockerAvailable bool
 }
 
@@ -30,10 +33,16 @@ func New(cfg *config.Config) *Server {
 	s := &Server{
 		cfg:             cfg,
 		mux:             http.NewServeMux(),
+		ready:           make(chan struct{}),
 		dockerAvailable: checkDockerAvailable(),
 	}
 	s.routes()
 	return s
+}
+
+// Ready returns a channel that is closed when the server is ready to accept connections.
+func (s *Server) Ready() <-chan struct{} {
+	return s.ready
 }
 
 // checkDockerAvailable checks if Docker is available on the system.
