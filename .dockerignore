@@ -1,0 +1,6 @@
+.git
+.worktrees
+*.md
+!README.md
+.env*
+coverage.out
