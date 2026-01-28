@@ -1,27 +1,55 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"os/exec"
+	"sync"
 
 	"github.com/drewdunne/familiar/internal/config"
+	"github.com/drewdunne/familiar/internal/metrics"
 	"github.com/drewdunne/familiar/internal/webhook"
 )
 
+// HealthResponse represents the health check response structure.
+type HealthResponse struct {
+	Status string                 `json:"status"`
+	Checks map[string]interface{} `json:"checks"`
+}
+
 // Server is the HTTP server for Familiar.
 type Server struct {
-	cfg *config.Config
-	mux *http.ServeMux
+	cfg             *config.Config
+	mux             *http.ServeMux
+	httpServer      *httpServer
+	httpServerMu    sync.RWMutex // protects httpServer pointer
+	ready           chan struct{} // closed when server is ready to accept connections
+	dockerAvailable bool
 }
 
 // New creates a new Server with the given config.
 func New(cfg *config.Config) *Server {
 	s := &Server{
-		cfg: cfg,
-		mux: http.NewServeMux(),
+		cfg:             cfg,
+		mux:             http.NewServeMux(),
+		ready:           make(chan struct{}),
+		dockerAvailable: checkDockerAvailable(),
 	}
 	s.routes()
 	return s
+}
+
+// Ready returns a channel that is closed when the server is ready to accept connections.
+func (s *Server) Ready() <-chan struct{} {
+	return s.ready
+}
+
+// checkDockerAvailable checks if Docker is available on the system.
+func checkDockerAvailable() bool {
+	cmd := exec.Command("docker", "info")
+	err := cmd.Run()
+	return err == nil
 }
 
 // Handler returns the HTTP handler for the server.
@@ -32,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 // routes sets up the HTTP routes.
 func (s *Server) routes() {
 	s.mux.HandleFunc("/health", s.handleHealth)
+	s.mux.HandleFunc("/metrics", s.handleMetrics)
 
 	// GitHub webhook
 	if s.cfg.Providers.GitHub.WebhookSecret != "" {
@@ -54,8 +83,23 @@ func (s *Server) routes() {
 
 // handleHealth responds with server health status.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	checks := map[string]interface{}{
+		"docker":        s.dockerAvailable,
+		"active_agents": 0, // Would come from spawner if available
+	}
+
+	status := "ok"
+	if !s.dockerAvailable {
+		status = "degraded"
+	}
+
+	health := HealthResponse{
+		Status: status,
+		Checks: checks,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
+	json.NewEncoder(w).Encode(health)
 }
 
 // handleGitHubEvent processes a GitHub webhook event.
@@ -70,4 +114,12 @@ func (s *Server) handleGitLabEvent(event *webhook.GitLabEvent) error {
 	log.Printf("Received GitLab event: %s, kind: %s", event.EventType, event.ObjectKind)
 	// TODO: Route to event processor in future phases
 	return nil
+}
+
+// handleMetrics responds with current operational metrics.
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	m := metrics.Get()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(m)
 }

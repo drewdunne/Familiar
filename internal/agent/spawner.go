@@ -15,9 +15,10 @@ import (
 
 // SpawnerConfig configures the agent spawner.
 type SpawnerConfig struct {
-	Image         string
-	ClaudeAuthDir string
-	MaxAgents     int
+	Image          string
+	ClaudeAuthDir  string
+	MaxAgents      int
+	TimeoutMinutes int // 0 means no timeout
 }
 
 // SpawnRequest contains parameters for spawning an agent.
@@ -40,10 +41,11 @@ type Session struct {
 
 // Spawner manages agent container lifecycle.
 type Spawner struct {
-	cfg      SpawnerConfig
-	client   *docker.Client
-	sessions map[string]*Session
-	mu       sync.RWMutex
+	cfg       SpawnerConfig
+	client    *docker.Client
+	sessions  map[string]*Session
+	mu        sync.RWMutex
+	OnTimeout func(*Session) // Called when a session times out
 }
 
 // NewSpawner creates a new agent spawner.
@@ -226,4 +228,76 @@ func (s *Spawner) CaptureAndStop(ctx context.Context, sessionID string, logPath 
 	}
 
 	return s.Stop(ctx, sessionID)
+}
+
+// startTimeoutWatcher starts a goroutine that periodically checks for timed-out sessions.
+// Returns a function to stop the watcher.
+func (s *Spawner) startTimeoutWatcher() func() {
+	ticker := time.NewTicker(30 * time.Second)
+	done := make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				s.checkTimeouts()
+			case <-done:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
+	return func() {
+		close(done)
+	}
+}
+
+// checkTimeouts checks all sessions and marks/handles those that have exceeded the timeout.
+func (s *Spawner) checkTimeouts() {
+	// Skip if no timeout configured
+	if s.cfg.TimeoutMinutes == 0 {
+		return
+	}
+
+	timeout := time.Duration(s.cfg.TimeoutMinutes) * time.Minute
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, session := range s.sessions {
+		if session.Status != "running" {
+			continue
+		}
+
+		if now.Sub(session.StartedAt) > timeout {
+			// Mark session as timed out
+			session.Status = "timed_out"
+
+			// Call the timeout callback if set
+			if s.OnTimeout != nil {
+				// Call callback without holding lock to avoid deadlock
+				// Make a copy of session for the callback
+				sessionCopy := *session
+				go s.OnTimeout(&sessionCopy)
+			}
+		}
+	}
+}
+
+// StopAll stops all active sessions.
+func (s *Spawner) StopAll(ctx context.Context) {
+	s.mu.Lock()
+	sessionIDs := make([]string, 0, len(s.sessions))
+	for id := range s.sessions {
+		sessionIDs = append(sessionIDs, id)
+	}
+	s.mu.Unlock()
+
+	for _, id := range sessionIDs {
+		if err := s.Stop(ctx, id); err != nil {
+			log.Printf("warning: failed to stop session %s: %v", id, err)
+		}
+	}
 }
