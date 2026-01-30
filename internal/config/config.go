@@ -109,6 +109,7 @@ type GitLabConfig struct {
 	AuthMethod    string `yaml:"auth_method"`
 	Token         string `yaml:"token"`
 	WebhookSecret string `yaml:"webhook_secret"`
+	BaseURL       string `yaml:"base_url"`
 }
 
 // envVarPattern matches ${VAR_NAME} patterns.

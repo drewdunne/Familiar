@@ -23,7 +23,11 @@ func New(cfg *config.Config) *Registry {
 	}
 
 	if cfg.Providers.GitLab.Token != "" {
-		r.providers["gitlab"] = gitlab.New(cfg.Providers.GitLab.Token)
+		var opts []gitlab.Option
+		if cfg.Providers.GitLab.BaseURL != "" {
+			opts = append(opts, gitlab.WithBaseURL(cfg.Providers.GitLab.BaseURL))
+		}
+		r.providers["gitlab"] = gitlab.New(cfg.Providers.GitLab.Token, opts...)
 	}
 
 	return r

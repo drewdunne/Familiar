@@ -112,6 +112,30 @@ providers:
 	}
 }
 
+func TestLoadConfig_GitLabBaseURL(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `
+providers:
+  gitlab:
+    token: "gl-token"
+    base_url: "https://gitlab.example.com"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Providers.GitLab.BaseURL != "https://gitlab.example.com" {
+		t.Errorf("Providers.GitLab.BaseURL = %q, want %q", cfg.Providers.GitLab.BaseURL, "https://gitlab.example.com")
+	}
+}
+
 func TestLoadConfig_Defaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")

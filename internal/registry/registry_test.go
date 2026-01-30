@@ -38,6 +38,27 @@ func TestRegistry_Get(t *testing.T) {
 	}
 }
 
+func TestRegistry_GitLabWithBaseURL(t *testing.T) {
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			GitLab: config.GitLabConfig{
+				Token:   "gl-token",
+				BaseURL: "https://gitlab.example.com",
+			},
+		},
+	}
+
+	reg := New(cfg)
+
+	gl := reg.Get("gitlab")
+	if gl == nil {
+		t.Fatal("Get(gitlab) returned nil when base_url is configured")
+	}
+	if gl.Name() != "gitlab" {
+		t.Errorf("gitlab provider name = %q, want %q", gl.Name(), "gitlab")
+	}
+}
+
 func TestRegistry_List(t *testing.T) {
 	cfg := &config.Config{
 		Providers: config.ProvidersConfig{
