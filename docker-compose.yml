@@ -14,6 +14,7 @@ services:
       - GITLAB_WEBHOOK_SECRET
       - REPO_CACHE_DIR
       - LOG_DIR
+      - LOG_HOST_DIR
       - CLAUDE_AUTH_DIR
       - AGENT_IMAGE
       - GITLAB_BASE_URL

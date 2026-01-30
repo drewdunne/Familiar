@@ -94,7 +94,7 @@ func runServe(args []string) {
 	defer spawner.Close()
 
 	// Create agent handler
-	agentHandler := handler.NewAgentHandler(spawner, repoCache, reg)
+	agentHandler := handler.NewAgentHandler(spawner, repoCache, reg, cfg.Logging.Dir, cfg.Logging.HostDir)
 
 	// Create event router
 	router := event.NewRouter(cfg, agentHandler.Handle, nil)

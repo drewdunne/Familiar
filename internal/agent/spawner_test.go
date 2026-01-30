@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -228,6 +229,68 @@ func TestSpawner_CaptureAndStop(t *testing.T) {
 	// Verify session is removed
 	if _, ok := spawner.GetSession(session.ID); ok {
 		t.Error("Session should be removed after CaptureAndStop")
+	}
+}
+
+func TestContainerCmd(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+	}{
+		{
+			name:   "simple prompt",
+			prompt: "Review this merge request",
+		},
+		{
+			name:   "prompt with single quotes",
+			prompt: "Review the user's code",
+		},
+		{
+			name:   "prompt with special characters",
+			prompt: "Check for $variables and `backticks`",
+		},
+		{
+			name:   "multiline prompt",
+			prompt: "## Context\n- Repository: foo/bar\n\n## Task\nReview this PR",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, env := containerCmd(tt.prompt)
+
+			// Should produce shell command via /bin/sh -c
+			if len(cmd) != 2 || cmd[0] != "-c" {
+				t.Fatalf("cmd = %v, want [-c <command>]", cmd)
+			}
+
+			// Command should invoke claude with --dangerously-skip-permissions
+			if !strings.Contains(cmd[1], "claude --dangerously-skip-permissions") {
+				t.Error("command should invoke claude with --dangerously-skip-permissions")
+			}
+
+			// Command should use tmux
+			if !strings.Contains(cmd[1], "tmux new-session") {
+				t.Error("command should use tmux")
+			}
+
+			// Command should NOT embed the raw prompt text (use env var instead)
+			if strings.Contains(cmd[1], tt.prompt) {
+				t.Error("command should not embed raw prompt text; should use env var")
+			}
+
+			// Env should contain the prompt
+			found := false
+			for _, e := range env {
+				if e == "FAMILIAR_PROMPT="+tt.prompt {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Error("env should contain FAMILIAR_PROMPT with the prompt value")
+			}
+		})
 	}
 }
 

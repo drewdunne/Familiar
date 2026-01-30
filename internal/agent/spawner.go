@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -107,6 +106,10 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 
+	// Build container command (claude CLI inside tmux, prompt via env var)
+	cmd, cmdEnv := containerCmd(req.Prompt)
+	env = append(env, cmdEnv...)
+
 	// Create container
 	containerID, err := s.client.CreateContainer(ctx, docker.ContainerConfig{
 		Name:    "familiar-agent-" + req.ID,
@@ -118,13 +121,7 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 			"familiar.agent":    "true",
 			"familiar.agent.id": req.ID,
 		},
-		// Start tmux session with claude command
-		// Escape single quotes in prompt to prevent shell injection
-		// Pattern: replace ' with '\'' (end quote, escaped quote, start quote)
-		Cmd: []string{"-c", fmt.Sprintf(
-			"tmux new-session -d -s claude '%s' && tmux wait-for claude",
-			strings.ReplaceAll(req.Prompt, "'", "'\\''"),
-		)},
+		Cmd:        cmd,
 		Entrypoint: []string{"/bin/sh"},
 	})
 	if err != nil {
@@ -284,6 +281,16 @@ func (s *Spawner) checkTimeouts() {
 			}
 		}
 	}
+}
+
+// containerCmd builds the container Cmd and extra env vars for running
+// a Claude agent inside a tmux session. The prompt is passed via the
+// FAMILIAR_PROMPT environment variable to avoid nested shell quoting issues.
+func containerCmd(prompt string) (cmd []string, extraEnv []string) {
+	return []string{"-c",
+			`tmux new-session -d -s claude 'claude --dangerously-skip-permissions "$FAMILIAR_PROMPT"' && tmux wait-for claude`,
+		},
+		[]string{"FAMILIAR_PROMPT=" + prompt}
 }
 
 // StopAll stops all active sessions.

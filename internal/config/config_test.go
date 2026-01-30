@@ -18,6 +18,7 @@ server:
 
 logging:
   dir: "/var/log/familiar"
+  host_dir: "/home/user/project/logs"
   retention_days: 30
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
@@ -37,6 +38,9 @@ logging:
 	}
 	if cfg.Logging.Dir != "/var/log/familiar" {
 		t.Errorf("Logging.Dir = %q, want %q", cfg.Logging.Dir, "/var/log/familiar")
+	}
+	if cfg.Logging.HostDir != "/home/user/project/logs" {
+		t.Errorf("Logging.HostDir = %q, want %q", cfg.Logging.HostDir, "/home/user/project/logs")
 	}
 	if cfg.Logging.RetentionDays != 30 {
 		t.Errorf("Logging.RetentionDays = %d, want %d", cfg.Logging.RetentionDays, 30)

@@ -88,6 +88,7 @@ type ServerConfig struct {
 // LoggingConfig holds logging settings.
 type LoggingConfig struct {
 	Dir           string `yaml:"dir"`
+	HostDir       string `yaml:"host_dir"` // Absolute host path for log display
 	RetentionDays int    `yaml:"retention_days"`
 }
 
