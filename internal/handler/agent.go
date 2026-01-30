@@ -143,8 +143,8 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 	containerName := "familiar-agent-" + agentID
 	log.Printf("Spawned agent %s for %s/%s MR #%d (workDir: %s)", agentID, evt.RepoOwner, evt.RepoName, evt.MRNumber, workDir)
 	if displayPath != "" {
-		log.Printf("  Log file: %s", displayPath)
+		log.Printf("  Container logs: %s", displayPath)
 	}
-	log.Printf("  To connect to the agent shell: docker exec -it %s tmux attach-session -t claude", containerName)
+	log.Printf("  Live LLM session: docker exec -it %s tmux attach-session -t claude", containerName)
 	return nil
 }
