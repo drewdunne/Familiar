@@ -100,6 +100,6 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 		return fmt.Errorf("spawning agent: %w", err)
 	}
 
-	log.Printf("Spawned agent %s for %s/%s MR #%d (workDir: %s)", agentID, evt.RepoOwner, evt.RepoName, evt.MRNumber, workDir)
+	log.Printf("Spawned agent %s for %s/%s MR #%d (workDir: %s, logs: logs/%s/%s/%d/)", agentID, evt.RepoOwner, evt.RepoName, evt.MRNumber, workDir, evt.RepoOwner, evt.RepoName, evt.MRNumber)
 	return nil
 }
