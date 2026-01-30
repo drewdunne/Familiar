@@ -55,3 +55,9 @@ test/fixtures/local/
 
 # Git worktrees
 .worktrees/
+
+# Repo cache (runtime data)
+cache/
+
+# Claude Code local settings
+.claude/settings.local.json
