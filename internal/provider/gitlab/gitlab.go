@@ -42,9 +42,10 @@ func (p *GitLabProvider) Name() string {
 	return "gitlab"
 }
 
-// projectPath encodes owner/repo for GitLab API.
+// projectPath returns owner/repo for GitLab API.
+// The go-gitlab library handles URL encoding internally.
 func projectPath(owner, repo string) string {
-	return url.PathEscape(owner + "/" + repo)
+	return owner + "/" + repo
 }
 
 // GetRepository fetches repository metadata.

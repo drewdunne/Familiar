@@ -10,7 +10,7 @@ import (
 
 func TestGitLabProvider_GetRepository(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v4/projects/owner%2Frepo" {
+		if r.URL.Path != "/api/v4/projects/owner/repo" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		if r.Header.Get("PRIVATE-TOKEN") != "test-token" {
@@ -40,7 +40,7 @@ func TestGitLabProvider_GetRepository(t *testing.T) {
 
 func TestGitLabProvider_GetMergeRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v4/projects/owner%2Frepo/merge_requests/42" {
+		if r.URL.Path != "/api/v4/projects/owner/repo/merge_requests/42" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -80,7 +80,7 @@ func TestGitLabProvider_Name(t *testing.T) {
 
 func TestGitLabProvider_GetChangedFiles(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v4/projects/owner%2Frepo/merge_requests/42/changes" {
+		if r.URL.Path != "/api/v4/projects/owner/repo/merge_requests/42/changes" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -108,7 +108,7 @@ func TestGitLabProvider_GetChangedFiles(t *testing.T) {
 
 func TestGitLabProvider_PostComment(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v4/projects/owner%2Frepo/merge_requests/42/notes" {
+		if r.URL.Path != "/api/v4/projects/owner/repo/merge_requests/42/notes" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		if r.Method != http.MethodPost {
@@ -127,7 +127,7 @@ func TestGitLabProvider_PostComment(t *testing.T) {
 
 func TestGitLabProvider_GetComments(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v4/projects/owner%2Frepo/merge_requests/42/notes" {
+		if r.URL.Path != "/api/v4/projects/owner/repo/merge_requests/42/notes" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		json.NewEncoder(w).Encode([]map[string]interface{}{
