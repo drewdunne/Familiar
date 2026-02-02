@@ -155,6 +155,18 @@ func TestGitHubProvider_GetComments(t *testing.T) {
 	}
 }
 
+func TestGitHubProvider_AgentEnv(t *testing.T) {
+	p := New("ghp-test-token-123")
+	got := p.AgentEnv()
+
+	if len(got) != 1 {
+		t.Errorf("AgentEnv() returned %d entries, want 1", len(got))
+	}
+	if got["GITHUB_TOKEN"] != "ghp-test-token-123" {
+		t.Errorf("AgentEnv()[GITHUB_TOKEN] = %q, want %q", got["GITHUB_TOKEN"], "ghp-test-token-123")
+	}
+}
+
 func TestGitHubProvider_GetRepository_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

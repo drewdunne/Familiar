@@ -151,6 +151,52 @@ func TestGitLabProvider_GetComments(t *testing.T) {
 	}
 }
 
+func TestGitLabProvider_AgentEnv(t *testing.T) {
+	tests := []struct {
+		name    string
+		token   string
+		baseURL string
+		want    map[string]string
+	}{
+		{
+			name:  "token only",
+			token: "glpat-abc123",
+			want: map[string]string{
+				"GITLAB_TOKEN": "glpat-abc123",
+			},
+		},
+		{
+			name:    "token and base URL",
+			token:   "glpat-abc123",
+			baseURL: "https://gitlab.example.com",
+			want: map[string]string{
+				"GITLAB_TOKEN": "glpat-abc123",
+				"GITLAB_HOST":  "https://gitlab.example.com",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []Option
+			if tc.baseURL != "" {
+				opts = append(opts, WithBaseURL(tc.baseURL))
+			}
+			p := New(tc.token, opts...)
+			got := p.AgentEnv()
+
+			if len(got) != len(tc.want) {
+				t.Errorf("AgentEnv() returned %d entries, want %d", len(got), len(tc.want))
+			}
+			for k, v := range tc.want {
+				if got[k] != v {
+					t.Errorf("AgentEnv()[%q] = %q, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
 func TestGitLabProvider_GetRepository_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

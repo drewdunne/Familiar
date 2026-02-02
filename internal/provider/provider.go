@@ -22,6 +22,10 @@ type Provider interface {
 	// GetComments fetches comments on a merge request.
 	GetComments(ctx context.Context, owner, repo string, number int) ([]Comment, error)
 
+	// AgentEnv returns environment variables for agent containers to authenticate
+	// with the provider's API via CLI tools (gh, glab).
+	AgentEnv() map[string]string
+
 	// AuthenticatedCloneURL returns a clone URL with embedded credentials.
 	// The rawURL is the original clone URL from the webhook payload.
 	AuthenticatedCloneURL(rawURL string) (string, error)

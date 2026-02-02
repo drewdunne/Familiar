@@ -148,6 +148,14 @@ func (p *GitHubProvider) GetComments(ctx context.Context, owner, repo string, nu
 	return result, nil
 }
 
+// AgentEnv returns environment variables for agent containers to authenticate
+// with the GitHub API via gh CLI.
+func (p *GitHubProvider) AgentEnv() map[string]string {
+	return map[string]string{
+		"GITHUB_TOKEN": p.token,
+	}
+}
+
 // AuthenticatedCloneURL returns a clone URL with embedded GitHub token.
 // Format: https://x-access-token:TOKEN@github.com/org/repo.git
 func (p *GitHubProvider) AuthenticatedCloneURL(rawURL string) (string, error) {

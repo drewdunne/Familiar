@@ -11,16 +11,18 @@ import (
 
 // GitLabProvider implements provider.Provider for GitLab.
 type GitLabProvider struct {
-	client *gitlab.Client
-	token  string
+	client  *gitlab.Client
+	token   string
+	baseURL string
 }
 
 // Option configures the GitLab provider.
 type Option func(*GitLabProvider)
 
-// WithBaseURL sets a custom base URL (for testing).
+// WithBaseURL sets a custom base URL (for self-hosted instances and testing).
 func WithBaseURL(baseURL string) Option {
 	return func(p *GitLabProvider) {
+		p.baseURL = baseURL
 		p.client, _ = gitlab.NewClient(p.token, gitlab.WithBaseURL(baseURL+"/api/v4"))
 	}
 }
@@ -151,6 +153,18 @@ func (p *GitLabProvider) GetComments(ctx context.Context, owner, repo string, nu
 		}
 	}
 	return result, nil
+}
+
+// AgentEnv returns environment variables for agent containers to authenticate
+// with the GitLab API via glab CLI.
+func (p *GitLabProvider) AgentEnv() map[string]string {
+	env := map[string]string{
+		"GITLAB_TOKEN": p.token,
+	}
+	if p.baseURL != "" {
+		env["GITLAB_HOST"] = p.baseURL
+	}
+	return env
 }
 
 // AuthenticatedCloneURL returns a clone URL with embedded GitLab token.
