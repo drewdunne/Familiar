@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -291,6 +293,58 @@ func TestContainerCmd(t *testing.T) {
 				t.Error("env should contain FAMILIAR_PROMPT with the prompt value")
 			}
 		})
+	}
+}
+
+func TestNewSpawner_WarnsOnEmptyClaudeAuthDir(t *testing.T) {
+	// Skip if Docker not available
+	if os.Getenv("DOCKER_HOST") == "" && os.Getenv("CI") == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+			t.Skip("Docker not available")
+		}
+	}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	spawner, err := NewSpawner(SpawnerConfig{
+		Image:         "alpine:latest",
+		ClaudeAuthDir: "",
+	})
+	if err != nil {
+		t.Fatalf("NewSpawner() error = %v", err)
+	}
+	defer spawner.Close()
+
+	if !strings.Contains(buf.String(), "claude_auth_dir not configured") {
+		t.Errorf("expected warning about claude_auth_dir, got log output: %q", buf.String())
+	}
+}
+
+func TestNewSpawner_NoWarningWhenClaudeAuthDirSet(t *testing.T) {
+	// Skip if Docker not available
+	if os.Getenv("DOCKER_HOST") == "" && os.Getenv("CI") == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+			t.Skip("Docker not available")
+		}
+	}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	spawner, err := NewSpawner(SpawnerConfig{
+		Image:         "alpine:latest",
+		ClaudeAuthDir: "/some/path",
+	})
+	if err != nil {
+		t.Fatalf("NewSpawner() error = %v", err)
+	}
+	defer spawner.Close()
+
+	if strings.Contains(buf.String(), "claude_auth_dir not configured") {
+		t.Errorf("unexpected warning when ClaudeAuthDir is set, got log output: %q", buf.String())
 	}
 }
 

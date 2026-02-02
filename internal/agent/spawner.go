@@ -54,6 +54,10 @@ func NewSpawner(cfg SpawnerConfig) (*Spawner, error) {
 		return nil, fmt.Errorf("creating docker client: %w", err)
 	}
 
+	if cfg.ClaudeAuthDir == "" {
+		log.Println("WARNING: claude_auth_dir not configured; agents will hit first-run prompts")
+	}
+
 	if cfg.MaxAgents == 0 {
 		cfg.MaxAgents = 5
 	}
@@ -91,13 +95,11 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 
 	// Mount Claude auth if configured
 	if s.cfg.ClaudeAuthDir != "" {
-		if _, err := os.Stat(s.cfg.ClaudeAuthDir); err == nil {
-			mounts = append(mounts, docker.Mount{
-				Source:   s.cfg.ClaudeAuthDir,
-				Target:   "/home/agent/.claude",
-				ReadOnly: true,
-			})
-		}
+		mounts = append(mounts, docker.Mount{
+			Source:   s.cfg.ClaudeAuthDir,
+			Target:   "/home/agent/.claude",
+			ReadOnly: true,
+		})
 	}
 
 	// Prepare environment
