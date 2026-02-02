@@ -7,7 +7,9 @@ RUN apk add --no-cache \
     openssh-client \
     ca-certificates \
     curl \
-    bash
+    bash \
+    github-cli \
+    glab
 
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
