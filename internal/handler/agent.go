@@ -13,15 +13,32 @@ import (
 	"github.com/drewdunne/familiar/internal/lca"
 	"github.com/drewdunne/familiar/internal/logging"
 	"github.com/drewdunne/familiar/internal/prompt"
-	"github.com/drewdunne/familiar/internal/registry"
-	"github.com/drewdunne/familiar/internal/repocache"
+	"github.com/drewdunne/familiar/internal/provider"
 )
+
+// AgentSpawner spawns agent containers.
+type AgentSpawner interface {
+	Spawn(ctx context.Context, req agent.SpawnRequest) (*agent.Session, error)
+}
+
+// RepoCache manages repository clones and worktrees.
+type RepoCache interface {
+	EnsureRepo(ctx context.Context, cloneURL, owner, repo string) (string, error)
+	CreateWorktree(ctx context.Context, owner, repo, ref, worktreeID string) (string, error)
+	RemoveWorktree(ctx context.Context, owner, repo, worktreeID string) error
+	HostPath(containerPath string) string
+}
+
+// ProviderRegistry looks up configured providers by name.
+type ProviderRegistry interface {
+	Get(name string) provider.Provider
+}
 
 // AgentHandler handles events by spawning agents.
 type AgentHandler struct {
-	spawner       *agent.Spawner
-	repoCache     *repocache.Cache
-	registry      *registry.Registry
+	spawner       AgentSpawner
+	repoCache     RepoCache
+	registry      ProviderRegistry
 	promptBuilder *prompt.Builder
 	logWriter     *logging.Writer
 	logDir        string // container path for creating log files
@@ -29,7 +46,7 @@ type AgentHandler struct {
 }
 
 // NewAgentHandler creates a new agent handler.
-func NewAgentHandler(spawner *agent.Spawner, repoCache *repocache.Cache, reg *registry.Registry, logDir, logHostDir string) *AgentHandler {
+func NewAgentHandler(spawner AgentSpawner, repoCache RepoCache, reg ProviderRegistry, logDir, logHostDir string) *AgentHandler {
 	var logWriter *logging.Writer
 	if logDir != "" {
 		logWriter = logging.NewWriter(logDir)
@@ -62,9 +79,9 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 
 	// Get authenticated clone URL from provider
 	cloneURL := evt.RepoURL
-	provider := h.registry.Get(evt.Provider)
-	if provider != nil {
-		authURL, err := provider.AuthenticatedCloneURL(evt.RepoURL)
+	prov := h.registry.Get(evt.Provider)
+	if prov != nil {
+		authURL, err := prov.AuthenticatedCloneURL(evt.RepoURL)
 		if err != nil {
 			log.Printf("warning: failed to get authenticated URL, using raw URL: %v", err)
 		} else {
@@ -85,8 +102,8 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 
 	// Get changed files and calculate LCA for working directory
 	workDir := "/workspace"
-	if provider != nil {
-		changedFiles, err := provider.GetChangedFiles(ctx, evt.RepoOwner, evt.RepoName, evt.MRNumber)
+	if prov != nil {
+		changedFiles, err := prov.GetChangedFiles(ctx, evt.RepoOwner, evt.RepoName, evt.MRNumber)
 		if err != nil {
 			log.Printf("warning: failed to get changed files: %v", err)
 		} else if len(changedFiles) > 0 {
@@ -103,6 +120,12 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 		}
 	}
 
+	// Collect provider environment variables for the agent container
+	var spawnEnv map[string]string
+	if prov != nil {
+		spawnEnv = prov.AgentEnv()
+	}
+
 	// Build prompt using the prompt builder
 	agentPrompt := h.promptBuilder.Build(evt, cfg, parsedIntent)
 
@@ -113,6 +136,7 @@ func (h *AgentHandler) Handle(ctx context.Context, evt *event.Event, cfg *config
 		WorktreePath: hostWorktreePath,
 		WorkDir:      workDir,
 		Prompt:       agentPrompt,
+		Env:          spawnEnv,
 	})
 	if err != nil {
 		// Cleanup worktree on failure
