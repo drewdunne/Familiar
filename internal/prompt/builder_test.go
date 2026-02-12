@@ -474,7 +474,7 @@ func TestBuilder_Build_LineCommentImpliesPush(t *testing.T) {
 	}
 }
 
-func TestBuilder_Build_GeneralCommentDoesNotImplyPush(t *testing.T) {
+func TestBuilder_Build_GeneralCommentImpliesPush(t *testing.T) {
 	builder := NewBuilder()
 
 	evt := &event.Event{
@@ -484,7 +484,7 @@ func TestBuilder_Build_GeneralCommentDoesNotImplyPush(t *testing.T) {
 		TargetBranch:  "main",
 		CommentBody:   "Looks good overall",
 		CommentAuthor: "reviewer",
-		// No CommentFilePath — this is a general MR comment
+		// No CommentFilePath — general MR comment, but still grants push
 	}
 
 	cfg := &config.MergedConfig{
@@ -504,8 +504,37 @@ func TestBuilder_Build_GeneralCommentDoesNotImplyPush(t *testing.T) {
 
 	prompt := builder.Build(evt, cfg, parsedIntent)
 
-	if !strings.Contains(prompt, "must NOT push commits (not requested)") {
-		t.Error("General comments should not imply push permission")
+	if !strings.Contains(prompt, "MAY push commits") {
+		t.Error("Comment events should imply push permission")
+	}
+}
+
+func TestBuilder_Build_MentionImpliesPush(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:          event.TypeMention,
+		MRNumber:      1,
+		SourceBranch:  "feature",
+		TargetBranch:  "main",
+		CommentBody:   "@familiar fix the typo in main.go",
+		CommentAuthor: "reviewer",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			Mention: "Follow instructions",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "on_request",
+			PushCommits: "on_request",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	if !strings.Contains(prompt, "MAY push commits") {
+		t.Error("Mention events should imply push permission")
 	}
 }
 

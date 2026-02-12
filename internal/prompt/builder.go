@@ -104,11 +104,13 @@ func (b *Builder) buildPermissions(evt *event.Event, cfg *config.MergedConfig, p
 		perms = append(perms, "- You SHOULD push commits when needed")
 	case "on_request":
 		explicitPush := parsedIntent != nil && (parsedIntent.HasAction(intent.ActionMerge) || parsedIntent.HasAction(intent.ActionPush))
-		// Line-level comments imply a code change request — grant push
-		lineComment := evt != nil && evt.CommentFilePath != ""
-		// MR review events (opened/updated) imply the agent may need to fix issues
-		mrReview := evt != nil && (evt.Type == event.TypeMROpened || evt.Type == event.TypeMRUpdated)
-		if explicitPush || lineComment || mrReview {
+		// Any MR-related event may require code changes — grant push.
+		// Comments and mentions may ask for changes (or the thread may contain
+		// prior requests); review events (opened/updated) imply the agent may
+		// need to fix issues it finds.
+		mrEvent := evt != nil && (evt.Type == event.TypeMROpened || evt.Type == event.TypeMRUpdated ||
+			evt.Type == event.TypeMRComment || evt.Type == event.TypeMention)
+		if explicitPush || mrEvent {
 			perms = append(perms, "- You MAY push commits")
 		} else {
 			perms = append(perms, "- You must NOT push commits (not requested)")
