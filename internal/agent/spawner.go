@@ -313,7 +313,11 @@ func (s *Spawner) checkTimeouts() {
 // Since Familiar runs as the host user (via docker-compose user:), agent
 // containers should run as the same UID for consistent file ownership.
 func resolveContainerUser() string {
-	return fmt.Sprintf("%d", os.Getuid())
+	uid := os.Getuid()
+	if uid == 0 {
+		log.Println("WARNING: running as root (UID 0); agent containers will also run as root")
+	}
+	return fmt.Sprintf("%d", uid)
 }
 
 // containerCmd builds the container Cmd and extra env vars for running

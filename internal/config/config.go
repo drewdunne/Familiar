@@ -51,9 +51,8 @@ type AgentsConfig struct {
 	TimeoutMinutes     int    `yaml:"timeout_minutes"`
 	DebounceSeconds    int    `yaml:"debounce_seconds"`
 	Image              string `yaml:"image"`
-	ClaudeAuthDir      string `yaml:"claude_auth_dir"`       // Host path for Docker bind mounts
-	ClaudeAuthMountDir string `yaml:"claude_auth_mount_dir"` // Container-local path for UID resolution
-	NetworkMode        string `yaml:"network_mode"`          // Docker network mode (e.g. "host")
+	ClaudeAuthDir string `yaml:"claude_auth_dir"` // Host path for Docker bind mounts
+	NetworkMode   string `yaml:"network_mode"`   // Docker network mode (e.g. "host")
 }
 
 // ConcurrencyConfig holds concurrency limits.
