@@ -162,6 +162,109 @@ func TestBuilder_Build_UnknownEventType(t *testing.T) {
 	}
 }
 
+func TestBuilder_Build_IncludesMRTitleAndDescription(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:          event.TypeMROpened,
+		Provider:      "gitlab",
+		RepoOwner:     "owner",
+		RepoName:      "repo",
+		MRNumber:      42,
+		MRTitle:       "Add user authentication",
+		MRDescription: "This MR adds JWT-based auth to the API.",
+		SourceBranch:  "feature/auth",
+		TargetBranch:  "main",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MROpened: "Review this MR",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "never",
+			PushCommits: "never",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	if !strings.Contains(prompt, "Add user authentication") {
+		t.Error("Prompt should contain MR title")
+	}
+	if !strings.Contains(prompt, "JWT-based auth") {
+		t.Error("Prompt should contain MR description")
+	}
+}
+
+func TestBuilder_Build_IncludesCommentBody(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:          event.TypeMRComment,
+		Provider:      "gitlab",
+		RepoOwner:     "owner",
+		RepoName:      "repo",
+		MRNumber:      42,
+		MRTitle:       "Add user authentication",
+		SourceBranch:  "feature/auth",
+		TargetBranch:  "main",
+		CommentBody:   "Can you add input validation to the login endpoint?",
+		CommentAuthor: "reviewer1",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MRComment: "Respond to the comment",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "never",
+			PushCommits: "never",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	if !strings.Contains(prompt, "Can you add input validation") {
+		t.Error("Prompt should contain the comment body")
+	}
+	if !strings.Contains(prompt, "reviewer1") {
+		t.Error("Prompt should contain the comment author")
+	}
+}
+
+func TestBuilder_Build_OmitsEmptyCommentBody(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:         event.TypeMROpened,
+		Provider:     "gitlab",
+		RepoOwner:    "owner",
+		RepoName:     "repo",
+		MRNumber:     42,
+		MRTitle:      "Some MR",
+		SourceBranch: "feature",
+		TargetBranch: "main",
+		CommentBody:  "",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MROpened: "Review",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "never",
+			PushCommits: "never",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	if strings.Contains(prompt, "## Comment") {
+		t.Error("Prompt should not contain Comment section when body is empty")
+	}
+}
+
 func TestBuilder_Build_AlwaysPermissions(t *testing.T) {
 	builder := NewBuilder()
 

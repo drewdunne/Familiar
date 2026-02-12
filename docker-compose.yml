@@ -7,6 +7,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./logs:/var/log/familiar
       - ${REPO_CACHE_DIR}:/cache
+      - ${CLAUDE_AUTH_DIR}:/claude-auth:ro
     environment:
       - GITHUB_TOKEN
       - GITHUB_WEBHOOK_SECRET

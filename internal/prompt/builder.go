@@ -25,7 +25,7 @@ func (b *Builder) Build(evt *event.Event, cfg *config.MergedConfig, parsedIntent
 	parts = append(parts, b.buildContext(evt))
 
 	// Base prompt
-	parts = append(parts, b.getBasePrompt(evt.Type, cfg))
+	parts = append(parts, b.getBasePrompt(evt.Type, cfg, evt))
 
 	// User instructions
 	if parsedIntent != nil && parsedIntent.Instructions != "" {
@@ -42,28 +42,46 @@ func (b *Builder) Build(evt *event.Event, cfg *config.MergedConfig, parsedIntent
 }
 
 func (b *Builder) buildContext(evt *event.Event) string {
-	return fmt.Sprintf(`## Context
+	ctx := fmt.Sprintf(`## Context
 - Repository: %s/%s
 - MR #%d: %s → %s
 - Provider: %s`,
 		evt.RepoOwner, evt.RepoName,
 		evt.MRNumber, evt.SourceBranch, evt.TargetBranch,
 		evt.Provider)
+
+	if evt.MRTitle != "" {
+		ctx += fmt.Sprintf("\n- Title: %s", evt.MRTitle)
+	}
+	if evt.MRDescription != "" {
+		ctx += fmt.Sprintf("\n\n## MR Description\n%s", evt.MRDescription)
+	}
+	if evt.CommentBody != "" {
+		ctx += fmt.Sprintf("\n\n## Comment\n**@%s:**\n%s", evt.CommentAuthor, evt.CommentBody)
+	}
+
+	return ctx
 }
 
-func (b *Builder) getBasePrompt(t event.Type, cfg *config.MergedConfig) string {
+func (b *Builder) getBasePrompt(t event.Type, cfg *config.MergedConfig, evt *event.Event) string {
+	var prompt string
 	switch t {
 	case event.TypeMROpened:
-		return cfg.Prompts.MROpened
+		prompt = cfg.Prompts.MROpened
 	case event.TypeMRComment:
-		return cfg.Prompts.MRComment
+		prompt = cfg.Prompts.MRComment
 	case event.TypeMRUpdated:
-		return cfg.Prompts.MRUpdated
+		prompt = cfg.Prompts.MRUpdated
 	case event.TypeMention:
-		return cfg.Prompts.Mention
+		prompt = cfg.Prompts.Mention
 	default:
-		return ""
+		prompt = ""
 	}
+	// Substitute placeholders
+	prompt = strings.ReplaceAll(prompt, "{MR_NUMBER}", fmt.Sprintf("%d", evt.MRNumber))
+	prompt = strings.ReplaceAll(prompt, "{REPO_OWNER}", evt.RepoOwner)
+	prompt = strings.ReplaceAll(prompt, "{REPO_NAME}", evt.RepoName)
+	return prompt
 }
 
 func (b *Builder) buildPermissions(cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) string {

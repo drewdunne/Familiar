@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/drewdunne/familiar/internal/docker"
@@ -14,10 +15,12 @@ import (
 
 // SpawnerConfig configures the agent spawner.
 type SpawnerConfig struct {
-	Image          string
-	ClaudeAuthDir  string
-	MaxAgents      int
-	TimeoutMinutes int // 0 means no timeout
+	Image              string
+	ClaudeAuthDir      string // Host path — used for Docker bind mounts to agent containers
+	ClaudeAuthMountDir string // Container-local path — used for UID resolution when running in Docker
+	MaxAgents          int
+	TimeoutMinutes     int    // 0 means no timeout
+	NetworkMode        string // Docker network mode (e.g. "host")
 }
 
 // SpawnRequest contains parameters for spawning an agent.
@@ -31,11 +34,12 @@ type SpawnRequest struct {
 
 // Session represents a running agent session.
 type Session struct {
-	ID           string
-	ContainerID  string
-	WorktreePath string
-	StartedAt    time.Time
-	Status       string
+	ID            string
+	ContainerID   string
+	ContainerUser string
+	WorktreePath  string
+	StartedAt     time.Time
+	Status        string
 }
 
 // Spawner manages agent container lifecycle.
@@ -84,7 +88,10 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 		return nil, fmt.Errorf("max agents limit reached (%d)", s.cfg.MaxAgents)
 	}
 
-	// Prepare mounts
+	// Resolve container user from auth dir ownership
+	containerUser := resolveContainerUser(s.cfg.ClaudeAuthDir, s.cfg.ClaudeAuthMountDir)
+
+	// Prepare bind mounts
 	mounts := []docker.Mount{
 		{
 			Source:   req.WorktreePath,
@@ -93,11 +100,21 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 		},
 	}
 
-	// Mount Claude auth if configured
+	// Prepare tmpfs mounts
+	var tmpfsMounts []docker.TmpfsMount
+
+	// Mount Claude auth as read-only source, use tmpfs for writable home
 	if s.cfg.ClaudeAuthDir != "" {
+		// Tmpfs for /home/agent so Claude can write anywhere in $HOME
+		// Mode 0777 allows any user to write (container runs as non-root)
+		tmpfsMounts = append(tmpfsMounts, docker.TmpfsMount{
+			Target: "/home/agent",
+			Mode:   0777,
+		})
+		// Read-only bind for credentials source (copied at container start)
 		mounts = append(mounts, docker.Mount{
 			Source:   s.cfg.ClaudeAuthDir,
-			Target:   "/home/agent/.claude",
+			Target:   "/claude-auth-src",
 			ReadOnly: true,
 		})
 	}
@@ -108,23 +125,31 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 
+	// Set HOME to match the claude auth mount target so claude finds its config
+	if s.cfg.ClaudeAuthDir != "" {
+		env = append(env, "HOME=/home/agent")
+	}
+
 	// Build container command (claude CLI inside tmux, prompt via env var)
 	cmd, cmdEnv := containerCmd(req.Prompt)
 	env = append(env, cmdEnv...)
 
 	// Create container
 	containerID, err := s.client.CreateContainer(ctx, docker.ContainerConfig{
-		Name:    "familiar-agent-" + req.ID,
-		Image:   s.cfg.Image,
-		WorkDir: req.WorkDir,
-		Mounts:  mounts,
-		Env:     env,
+		Name:        "familiar-agent-" + req.ID,
+		Image:       s.cfg.Image,
+		User:        containerUser,
+		WorkDir:     req.WorkDir,
+		Mounts:      mounts,
+		TmpfsMounts: tmpfsMounts,
+		Env:         env,
 		Labels: map[string]string{
 			"familiar.agent":    "true",
 			"familiar.agent.id": req.ID,
 		},
-		Cmd:        cmd,
-		Entrypoint: []string{"/bin/sh"},
+		Cmd:         cmd,
+		Entrypoint:  []string{"/bin/sh"},
+		NetworkMode: s.cfg.NetworkMode,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating container: %w", err)
@@ -138,11 +163,12 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 	}
 
 	session := &Session{
-		ID:           req.ID,
-		ContainerID:  containerID,
-		WorktreePath: req.WorktreePath,
-		StartedAt:    time.Now(),
-		Status:       "running",
+		ID:            req.ID,
+		ContainerID:   containerID,
+		ContainerUser: containerUser,
+		WorktreePath:  req.WorktreePath,
+		StartedAt:     time.Now(),
+		Status:        "running",
 	}
 
 	s.sessions[req.ID] = session
@@ -285,14 +311,70 @@ func (s *Spawner) checkTimeouts() {
 	}
 }
 
+// resolveContainerUser determines the UID to run agent containers as.
+// It tries claudeAuthDir first (works when running natively on the host),
+// then falls back to claudeAuthMountDir (container-local mount for when
+// familiar itself runs in Docker and the host path isn't accessible).
+func resolveContainerUser(claudeAuthDir, claudeAuthMountDir string) string {
+	if claudeAuthDir == "" {
+		return ""
+	}
+	uid, err := resolveUID(claudeAuthDir)
+	if err != nil && claudeAuthMountDir != "" {
+		uid, err = resolveUID(claudeAuthMountDir)
+	}
+	if err != nil {
+		log.Printf("warning: failed to resolve UID for claude auth dir: %v", err)
+		return ""
+	}
+	return uid
+}
+
+// resolveUID returns the UID of the owner of the given path as a string.
+func resolveUID(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", path, err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", fmt.Errorf("unsupported platform for UID resolution")
+	}
+	return fmt.Sprintf("%d", stat.Uid), nil
+}
+
 // containerCmd builds the container Cmd and extra env vars for running
 // a Claude agent inside a tmux session. The prompt is passed via the
 // FAMILIAR_PROMPT environment variable to avoid nested shell quoting issues.
+//
+// The command first copies credentials from /claude-auth-src (read-only bind mount)
+// to /home/agent/.claude (tmpfs), sets up glab config if GITLAB_HOST is set,
+// then runs Claude in a tmux session.
+// Uses -p (print mode) for non-interactive operation.
 func containerCmd(prompt string) (cmd []string, extraEnv []string) {
-	return []string{"-c",
-			`tmux new-session -d -s claude 'claude --dangerously-skip-permissions "$FAMILIAR_PROMPT"' && tmux wait-for claude`,
-		},
-		[]string{"FAMILIAR_PROMPT=" + prompt}
+	// Setup claude credentials
+	setupCmd := `mkdir -p /home/agent/.claude && ` +
+		`cp /claude-auth-src/.credentials.json /home/agent/.claude/ && ` +
+		`cp /claude-auth-src/settings.json /home/agent/.claude/ 2>/dev/null; `
+
+	// Setup glab config if GITLAB_HOST is set (for self-hosted GitLab)
+	setupCmd += `if [ -n "$GITLAB_HOST" ]; then ` +
+		`mkdir -p /home/agent/.config/glab-cli && ` +
+		`HOST=$(echo "$GITLAB_HOST" | sed 's|https://||' | sed 's|http://||') && ` +
+		`echo "hosts:" > /home/agent/.config/glab-cli/config.yml && ` +
+		`echo "  $HOST:" >> /home/agent/.config/glab-cli/config.yml && ` +
+		`echo "    token: env:GITLAB_TOKEN" >> /home/agent/.config/glab-cli/config.yml && ` +
+		`echo "    api_host: $HOST" >> /home/agent/.config/glab-cli/config.yml && ` +
+		`echo "    api_protocol: https" >> /home/agent/.config/glab-cli/config.yml && ` +
+		`echo "    git_protocol: https" >> /home/agent/.config/glab-cli/config.yml && ` +
+		`chmod 600 /home/agent/.config/glab-cli/config.yml; ` +
+		`fi; `
+
+	// Run claude in tmux
+	setupCmd += `tmux new-session -d -s claude 'claude --dangerously-skip-permissions -p "$FAMILIAR_PROMPT"' && ` +
+		`tmux wait-for claude`
+
+	return []string{"-c", setupCmd}, []string{"FAMILIAR_PROMPT=" + prompt}
 }
 
 // StopAll stops all active sessions.

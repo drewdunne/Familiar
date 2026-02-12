@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -71,14 +72,17 @@ func (c *Client) PullImage(ctx context.Context, imageName string) error {
 
 // ContainerConfig holds configuration for creating a container.
 type ContainerConfig struct {
-	Name       string
-	Image      string
-	WorkDir    string
-	Mounts     []Mount
-	Env        []string
-	Labels     map[string]string
-	Cmd        []string
-	Entrypoint []string
+	Name        string
+	Image       string
+	User        string // Container user (e.g. "1000" for UID)
+	WorkDir     string
+	Mounts      []Mount
+	TmpfsMounts []TmpfsMount // In-memory filesystem mounts
+	Env         []string
+	Labels      map[string]string
+	Cmd         []string
+	Entrypoint  []string
+	NetworkMode string // e.g. "host", "bridge", or empty for default
 }
 
 // Mount represents a bind mount.
@@ -88,21 +92,51 @@ type Mount struct {
 	ReadOnly bool
 }
 
+// TmpfsMount represents a tmpfs mount (in-memory filesystem).
+type TmpfsMount struct {
+	Target string
+	Mode   uint32 // File mode (e.g., 0777 for world-writable)
+}
+
 // CreateContainer creates a new container.
 func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (string, error) {
-	mounts := make([]mount.Mount, len(cfg.Mounts))
-	for i, m := range cfg.Mounts {
-		mounts[i] = mount.Mount{
+	mounts := make([]mount.Mount, 0, len(cfg.Mounts)+len(cfg.TmpfsMounts))
+
+	// Add bind mounts
+	for _, m := range cfg.Mounts {
+		mounts = append(mounts, mount.Mount{
 			Type:     mount.TypeBind,
 			Source:   m.Source,
 			Target:   m.Target,
 			ReadOnly: m.ReadOnly,
+		})
+	}
+
+	// Add tmpfs mounts
+	for _, m := range cfg.TmpfsMounts {
+		tmpfsMount := mount.Mount{
+			Type:   mount.TypeTmpfs,
+			Target: m.Target,
 		}
+		if m.Mode != 0 {
+			tmpfsMount.TmpfsOptions = &mount.TmpfsOptions{
+				Mode: os.FileMode(m.Mode),
+			}
+		}
+		mounts = append(mounts, tmpfsMount)
+	}
+
+	hostConfig := &container.HostConfig{
+		Mounts: mounts,
+	}
+	if cfg.NetworkMode != "" {
+		hostConfig.NetworkMode = container.NetworkMode(cfg.NetworkMode)
 	}
 
 	resp, err := c.cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:      cfg.Image,
+			User:       cfg.User,
 			WorkingDir: cfg.WorkDir,
 			Env:        cfg.Env,
 			Labels:     cfg.Labels,
@@ -111,9 +145,7 @@ func (c *Client) CreateContainer(ctx context.Context, cfg ContainerConfig) (stri
 			Tty:        true,
 			OpenStdin:  true,
 		},
-		&container.HostConfig{
-			Mounts: mounts,
-		},
+		hostConfig,
 		nil, nil, cfg.Name,
 	)
 	if err != nil {

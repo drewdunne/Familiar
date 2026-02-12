@@ -18,6 +18,40 @@ func TestClient_Ping(t *testing.T) {
 	}
 }
 
+func TestClient_CreateContainer_WithTmpfsMount(t *testing.T) {
+	client, err := NewClient()
+	if err != nil {
+		t.Skipf("Docker not available: %v", err)
+	}
+	defer client.Close()
+
+	ctx := context.Background()
+
+	// Ensure alpine image exists
+	if err := client.PullImage(ctx, "alpine:latest"); err != nil {
+		t.Skipf("Could not pull alpine image: %v", err)
+	}
+
+	// Create container with tmpfs mount
+	containerID, err := client.CreateContainer(ctx, ContainerConfig{
+		Name:  "test-tmpfs-container",
+		Image: "alpine:latest",
+		TmpfsMounts: []TmpfsMount{
+			{Target: "/home/agent"},
+		},
+		Cmd:        []string{"sleep", "5"},
+		Entrypoint: []string{},
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer() error = %v", err)
+	}
+	defer client.RemoveContainer(ctx, containerID, true)
+
+	if containerID == "" {
+		t.Error("CreateContainer() returned empty container ID")
+	}
+}
+
 func TestClient_ImageExists(t *testing.T) {
 	client, err := NewClient()
 	if err != nil {
