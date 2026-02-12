@@ -5,6 +5,11 @@
 # Start with: UID=$(id -u) GID=$(id -g) docker compose up
 # This ensures worktrees created by the server are writable by agent containers.
 
+# Bot username for self-detection (prevents recursive loops).
+# Set this to the GitLab/GitHub account username that Familiar posts as.
+# Default: "Familiar"
+bot_username: "Familiar"
+
 server:
   host: "0.0.0.0"
   port: 7000

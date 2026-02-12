@@ -10,6 +10,7 @@ import (
 
 // Config represents the server configuration.
 type Config struct {
+	BotUsername string                  `yaml:"bot_username"`
 	Server      ServerConfig            `yaml:"server"`
 	Logging     LoggingConfig           `yaml:"logging"`
 	Providers   ProvidersConfig         `yaml:"providers"`
@@ -120,6 +121,7 @@ var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() *Config {
 	return &Config{
+		BotUsername: "Familiar",
 		Server: ServerConfig{
 			Host: "0.0.0.0",
 			Port: 7000,

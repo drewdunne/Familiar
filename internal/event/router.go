@@ -15,10 +15,15 @@ import (
 // Format: project_<id>_bot_<hash>
 var gitlabBotPattern = regexp.MustCompile(`^project_\d+_bot_`)
 
-// isBotActor returns true if the actor username matches known bot patterns.
-func isBotActor(actor string) bool {
+// isBotActor returns true if the actor username matches the configured bot
+// username (case-insensitive) or known bot patterns.
+func isBotActor(actor, botUsername string) bool {
 	if actor == "" {
 		return false
+	}
+	// Configured bot username (case-insensitive)
+	if botUsername != "" && strings.EqualFold(actor, botUsername) {
+		return true
 	}
 	// GitHub app bots end with [bot]
 	if strings.HasSuffix(actor, "[bot]") {
@@ -60,7 +65,7 @@ func NewRouter(serverCfg *config.Config, handler Handler, parser intent.Parser) 
 // Route processes an event through the routing pipeline.
 func (r *Router) Route(ctx context.Context, event *Event) error {
 	// Skip events from bot actors to prevent recursive loops
-	if isBotActor(event.Actor) {
+	if isBotActor(event.Actor, r.serverCfg.BotUsername) {
 		log.Printf("Skipping event from bot actor: %s", event.Actor)
 		return nil
 	}

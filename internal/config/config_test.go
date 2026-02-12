@@ -170,4 +170,28 @@ server:
 	if cfg.Logging.RetentionDays != 30 {
 		t.Errorf("Logging.RetentionDays = %d, want default %d", cfg.Logging.RetentionDays, 30)
 	}
+	if cfg.BotUsername != "Familiar" {
+		t.Errorf("BotUsername = %q, want default %q", cfg.BotUsername, "Familiar")
+	}
+}
+
+func TestLoadConfig_BotUsernameOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `
+bot_username: "my-custom-bot"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.BotUsername != "my-custom-bot" {
+		t.Errorf("BotUsername = %q, want %q", cfg.BotUsername, "my-custom-bot")
+	}
 }

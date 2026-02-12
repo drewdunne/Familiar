@@ -395,31 +395,48 @@ func TestRouter_IntentParsing_ParserError(t *testing.T) {
 
 func TestIsBotActor(t *testing.T) {
 	tests := []struct {
-		actor string
-		want  bool
+		name        string
+		actor       string
+		botUsername string
+		want        bool
 	}{
 		// GitLab project access token bots
-		{"project_1_bot_d0fe5ec2e069d8e934540c30708818d6", true},
-		{"project_123_bot_abc123", true},
-		{"project_0_bot_x", true},
+		{"gitlab project bot", "project_1_bot_d0fe5ec2e069d8e934540c30708818d6", "Familiar", true},
+		{"gitlab project bot short hash", "project_123_bot_abc123", "Familiar", true},
+		{"gitlab project bot minimal", "project_0_bot_x", "Familiar", true},
 
 		// GitHub app bots
-		{"dependabot[bot]", true},
-		{"github-actions[bot]", true},
-		{"renovate[bot]", true},
+		{"github dependabot", "dependabot[bot]", "Familiar", true},
+		{"github actions bot", "github-actions[bot]", "Familiar", true},
+		{"github renovate bot", "renovate[bot]", "Familiar", true},
+
+		// Configured bot username - exact match
+		{"bot username exact match", "Familiar", "Familiar", true},
+
+		// Configured bot username - case insensitive
+		{"bot username lowercase", "familiar", "Familiar", true},
+		{"bot username uppercase", "FAMILIAR", "Familiar", true},
+		{"bot username mixed case", "fAmIlIaR", "Familiar", true},
+
+		// Custom bot username
+		{"custom bot username", "my-bot", "my-bot", true},
+		{"custom bot username case insensitive", "My-Bot", "my-bot", true},
+
+		// Empty bot username should not match everything
+		{"empty bot username no false positive", "drewdunne", "", false},
 
 		// Real users
-		{"drewdunne", false},
-		{"alice", false},
-		{"project_manager", false}, // not a bot pattern
-		{"bot_user", false},        // doesn't match pattern
-		{"", false},
+		{"real user drewdunne", "drewdunne", "Familiar", false},
+		{"real user alice", "alice", "Familiar", false},
+		{"real user project_manager", "project_manager", "Familiar", false},
+		{"real user bot_user", "bot_user", "Familiar", false},
+		{"empty actor", "", "Familiar", false},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.actor, func(t *testing.T) {
-			if got := isBotActor(tt.actor); got != tt.want {
-				t.Errorf("isBotActor(%q) = %v, want %v", tt.actor, got, tt.want)
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isBotActor(tt.actor, tt.botUsername); got != tt.want {
+				t.Errorf("isBotActor(%q, %q) = %v, want %v", tt.actor, tt.botUsername, got, tt.want)
 			}
 		})
 	}
@@ -459,6 +476,44 @@ func TestRouter_SkipsBotActor(t *testing.T) {
 
 	if handlerCalled {
 		t.Error("Handler should not be called for bot actor events")
+	}
+}
+
+func TestRouter_SkipsConfiguredBotUsername(t *testing.T) {
+	handlerCalled := false
+	handler := func(ctx context.Context, e *Event, cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) error {
+		handlerCalled = true
+		return nil
+	}
+
+	serverCfg := &config.Config{
+		BotUsername: "Familiar",
+		Events: config.ServerEventsConfig{
+			MRComment: true,
+		},
+		Agents: config.AgentsConfig{
+			DebounceSeconds: 1,
+		},
+	}
+
+	router := NewRouter(serverCfg, handler, nil)
+
+	event := &Event{
+		Type:      TypeMRComment,
+		Provider:  "gitlab",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		MRNumber:  42,
+		Actor:     "familiar", // lowercase — should still match
+	}
+
+	err := router.Route(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Route() error = %v", err)
+	}
+
+	if handlerCalled {
+		t.Error("Handler should not be called when actor matches configured bot username")
 	}
 }
 
