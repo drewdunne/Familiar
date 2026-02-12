@@ -380,9 +380,10 @@ chmod +x /home/agent/git-credential-helper && ` +
 		`chmod 600 /home/agent/.config/glab-cli/config.yml; ` +
 		`fi; `
 
-	// Run claude in tmux; signal the wait channel when done so the container stays alive
-	setupCmd += `tmux new-session -d -s claude 'claude --dangerously-skip-permissions -p "$FAMILIAR_PROMPT"; tmux wait-for -S claude' && ` +
-		`tmux wait-for claude`
+	// Run claude in tmux; tee output to a log file so Docker can capture it afterward.
+	// Without tee, tmux swallows all stdout/stderr and `docker logs` is empty.
+	setupCmd += `tmux new-session -d -s claude 'claude --dangerously-skip-permissions -p "$FAMILIAR_PROMPT" 2>&1 | tee /tmp/claude-output.log; tmux wait-for -S claude' && ` +
+		`tmux wait-for claude && cat /tmp/claude-output.log`
 
 	return []string{"-c", setupCmd}, []string{
 		"FAMILIAR_PROMPT=" + prompt,
