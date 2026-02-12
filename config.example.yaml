@@ -1,5 +1,9 @@
 # Familiar Configuration
 # Copy to config.yaml and customize
+#
+# IMPORTANT: The docker-compose.yml runs Familiar as your host user (UID/GID).
+# Start with: UID=$(id -u) GID=$(id -g) docker compose up
+# This ensures worktrees created by the server are writable by agent containers.
 
 server:
   host: "0.0.0.0"
@@ -18,8 +22,6 @@ agents:
   debounce_seconds: 10
   image: "${AGENT_IMAGE}"
   claude_auth_dir: "${CLAUDE_AUTH_DIR}"
-  # Container-local mount path for UID resolution (set when running in Docker)
-  # claude_auth_mount_dir: "/claude-auth"
 
 repo_cache:
   # Container path where the cache is mounted (for git operations)
