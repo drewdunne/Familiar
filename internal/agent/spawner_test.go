@@ -359,50 +359,6 @@ func TestNewSpawner_NoWarningWhenClaudeAuthDirSet(t *testing.T) {
 	}
 }
 
-func TestResolveUID(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(t *testing.T) string
-		wantErr   bool
-		wantUID   string
-	}{
-		{
-			name: "returns current user UID for temp dir",
-			setup: func(t *testing.T) string {
-				return t.TempDir()
-			},
-			wantErr: false,
-			wantUID: fmt.Sprintf("%d", os.Getuid()),
-		},
-		{
-			name: "returns error for non-existent path",
-			setup: func(t *testing.T) string {
-				return "/nonexistent/path/that/does/not/exist"
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := tt.setup(t)
-			uid, err := resolveUID(path)
-			if tt.wantErr {
-				if err == nil {
-					t.Error("resolveUID() expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("resolveUID() unexpected error: %v", err)
-			}
-			if uid != tt.wantUID {
-				t.Errorf("resolveUID() = %q, want %q", uid, tt.wantUID)
-			}
-		})
-	}
-}
-
 func TestSpawner_Spawn_SetsContainerUser(t *testing.T) {
 	// Skip if Docker not available
 	if os.Getenv("DOCKER_HOST") == "" && os.Getenv("CI") == "" {
@@ -411,13 +367,10 @@ func TestSpawner_Spawn_SetsContainerUser(t *testing.T) {
 		}
 	}
 
-	// Create a temp claude auth dir owned by the current user
-	claudeAuthDir := t.TempDir()
 	expectedUID := fmt.Sprintf("%d", os.Getuid())
 
 	spawner, err := NewSpawner(SpawnerConfig{
-		Image:         "alpine:latest",
-		ClaudeAuthDir: claudeAuthDir,
+		Image: "alpine:latest",
 	})
 	if err != nil {
 		t.Fatalf("NewSpawner() error = %v", err)
@@ -437,7 +390,7 @@ func TestSpawner_Spawn_SetsContainerUser(t *testing.T) {
 	}
 	defer spawner.Stop(context.Background(), session.ID)
 
-	// Verify the container is running as the expected UID
+	// Verify the container is running as the current process UID
 	if session.ContainerUser != expectedUID {
 		t.Errorf("session.ContainerUser = %q, want %q", session.ContainerUser, expectedUID)
 	}
@@ -486,46 +439,11 @@ func TestSpawner_Spawn_UsesTmpfsHome(t *testing.T) {
 	}
 }
 
-func TestResolveContainerUser(t *testing.T) {
-	expectedUID := fmt.Sprintf("%d", os.Getuid())
-
-	tests := []struct {
-		name           string
-		authDir        string
-		authMountDir   string
-		wantUser       string
-	}{
-		{
-			name:     "resolves from auth dir when accessible",
-			authDir:  t.TempDir(),
-			wantUser: expectedUID,
-		},
-		{
-			name:         "falls back to mount dir when auth dir inaccessible",
-			authDir:      "/nonexistent/host/path",
-			authMountDir: t.TempDir(),
-			wantUser:     expectedUID,
-		},
-		{
-			name:         "returns empty when both paths inaccessible",
-			authDir:      "/nonexistent/host/path",
-			authMountDir: "/also/nonexistent",
-			wantUser:     "",
-		},
-		{
-			name:     "returns empty when auth dir not configured",
-			authDir:  "",
-			wantUser: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := resolveContainerUser(tt.authDir, tt.authMountDir)
-			if got != tt.wantUser {
-				t.Errorf("resolveContainerUser() = %q, want %q", got, tt.wantUser)
-			}
-		})
+func TestResolveContainerUser_UsesProcessUID(t *testing.T) {
+	expected := fmt.Sprintf("%d", os.Getuid())
+	got := resolveContainerUser()
+	if got != expected {
+		t.Errorf("resolveContainerUser() = %q, want %q", got, expected)
 	}
 }
 

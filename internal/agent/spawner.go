@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/drewdunne/familiar/internal/docker"
@@ -15,12 +14,11 @@ import (
 
 // SpawnerConfig configures the agent spawner.
 type SpawnerConfig struct {
-	Image              string
-	ClaudeAuthDir      string // Host path — used for Docker bind mounts to agent containers
-	ClaudeAuthMountDir string // Container-local path — used for UID resolution when running in Docker
-	MaxAgents          int
-	TimeoutMinutes     int    // 0 means no timeout
-	NetworkMode        string // Docker network mode (e.g. "host")
+	Image          string
+	ClaudeAuthDir  string // Host path — used for Docker bind mounts to agent containers
+	MaxAgents      int
+	TimeoutMinutes int    // 0 means no timeout
+	NetworkMode    string // Docker network mode (e.g. "host")
 }
 
 // SpawnRequest contains parameters for spawning an agent.
@@ -88,8 +86,8 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 		return nil, fmt.Errorf("max agents limit reached (%d)", s.cfg.MaxAgents)
 	}
 
-	// Resolve container user from auth dir ownership
-	containerUser := resolveContainerUser(s.cfg.ClaudeAuthDir, s.cfg.ClaudeAuthMountDir)
+	// Resolve container user from current process UID
+	containerUser := resolveContainerUser()
 
 	// Prepare bind mounts
 	mounts := []docker.Mount{
@@ -311,36 +309,11 @@ func (s *Spawner) checkTimeouts() {
 	}
 }
 
-// resolveContainerUser determines the UID to run agent containers as.
-// It tries claudeAuthDir first (works when running natively on the host),
-// then falls back to claudeAuthMountDir (container-local mount for when
-// familiar itself runs in Docker and the host path isn't accessible).
-func resolveContainerUser(claudeAuthDir, claudeAuthMountDir string) string {
-	if claudeAuthDir == "" {
-		return ""
-	}
-	uid, err := resolveUID(claudeAuthDir)
-	if err != nil && claudeAuthMountDir != "" {
-		uid, err = resolveUID(claudeAuthMountDir)
-	}
-	if err != nil {
-		log.Printf("warning: failed to resolve UID for claude auth dir: %v", err)
-		return ""
-	}
-	return uid
-}
-
-// resolveUID returns the UID of the owner of the given path as a string.
-func resolveUID(path string) (string, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", fmt.Errorf("stat %s: %w", path, err)
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "", fmt.Errorf("unsupported platform for UID resolution")
-	}
-	return fmt.Sprintf("%d", stat.Uid), nil
+// resolveContainerUser returns the UID of the current process as a string.
+// Since Familiar runs as the host user (via docker-compose user:), agent
+// containers should run as the same UID for consistent file ownership.
+func resolveContainerUser() string {
+	return fmt.Sprintf("%d", os.Getuid())
 }
 
 // containerCmd builds the container Cmd and extra env vars for running
