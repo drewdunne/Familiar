@@ -3,6 +3,8 @@ services:
     build: .
     network_mode: host
     user: "${UID}:${GID}"
+    group_add:
+      - "${DOCKER_GID}"
     volumes:
       - ./config.yaml:/etc/familiar/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
