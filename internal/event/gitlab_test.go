@@ -128,6 +128,54 @@ func TestNormalizeGitLabEvent_Note(t *testing.T) {
 	}
 }
 
+func TestNormalizeGitLabEvent_NoteWithPosition(t *testing.T) {
+	raw := []byte(`{
+		"object_kind": "note",
+		"object_attributes": {
+			"id": 456,
+			"note": "Add an exclamation mark here",
+			"noteable_type": "MergeRequest",
+			"discussion_id": "abc123def456",
+			"position": {
+				"new_path": "services/api/src/index.ts",
+				"new_line": 8,
+				"position_type": "text"
+			}
+		},
+		"merge_request": {
+			"iid": 10,
+			"source_branch": "feature/greeting",
+			"target_branch": "main"
+		},
+		"project": {
+			"path_with_namespace": "owner/repo",
+			"git_http_url": "https://gitlab.com/owner/repo.git"
+		},
+		"user": {"username": "reviewer"}
+	}`)
+
+	glEvent := &webhook.GitLabEvent{
+		EventType:  "Note Hook",
+		ObjectKind: "note",
+		RawPayload: raw,
+	}
+
+	event, err := NormalizeGitLabEvent(glEvent)
+	if err != nil {
+		t.Fatalf("NormalizeGitLabEvent() error = %v", err)
+	}
+
+	if event.CommentFilePath != "services/api/src/index.ts" {
+		t.Errorf("CommentFilePath = %q, want %q", event.CommentFilePath, "services/api/src/index.ts")
+	}
+	if event.CommentLine != 8 {
+		t.Errorf("CommentLine = %d, want %d", event.CommentLine, 8)
+	}
+	if event.CommentDiscussionID != "abc123def456" {
+		t.Errorf("CommentDiscussionID = %q, want %q", event.CommentDiscussionID, "abc123def456")
+	}
+}
+
 func TestNormalizeGitLabEvent_Mention(t *testing.T) {
 	raw := []byte(`{
 		"object_kind": "note",

@@ -33,7 +33,7 @@ func (b *Builder) Build(evt *event.Event, cfg *config.MergedConfig, parsedIntent
 	}
 
 	// Permissions
-	parts = append(parts, b.buildPermissions(cfg, parsedIntent))
+	parts = append(parts, b.buildPermissions(evt, cfg, parsedIntent))
 
 	// Safety reminders
 	parts = append(parts, b.buildSafetyReminders())
@@ -58,6 +58,16 @@ func (b *Builder) buildContext(evt *event.Event) string {
 	}
 	if evt.CommentBody != "" {
 		ctx += fmt.Sprintf("\n\n## Comment\n**@%s:**\n%s", evt.CommentAuthor, evt.CommentBody)
+		if evt.CommentFilePath != "" {
+			ctx += fmt.Sprintf("\n\n**File:** `%s`", evt.CommentFilePath)
+			if evt.CommentLine > 0 {
+				ctx += fmt.Sprintf(" (line %d)", evt.CommentLine)
+			}
+			ctx += "\n\nThis comment was left on a specific line of code. The reviewer is referencing this exact location."
+		}
+		if evt.CommentDiscussionID != "" {
+			ctx += fmt.Sprintf("\n\n**Discussion ID:** %s\nReply to this discussion thread, not as a top-level MR comment.", evt.CommentDiscussionID)
+		}
 	}
 
 	return ctx
@@ -84,7 +94,7 @@ func (b *Builder) getBasePrompt(t event.Type, cfg *config.MergedConfig, evt *eve
 	return prompt
 }
 
-func (b *Builder) buildPermissions(cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) string {
+func (b *Builder) buildPermissions(evt *event.Event, cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) string {
 	var perms []string
 	perms = append(perms, "## Permissions")
 
@@ -93,7 +103,12 @@ func (b *Builder) buildPermissions(cfg *config.MergedConfig, parsedIntent *inten
 	case "always":
 		perms = append(perms, "- You SHOULD push commits when needed")
 	case "on_request":
-		if parsedIntent != nil && parsedIntent.HasAction(intent.ActionMerge) {
+		explicitPush := parsedIntent != nil && (parsedIntent.HasAction(intent.ActionMerge) || parsedIntent.HasAction(intent.ActionPush))
+		// Line-level comments imply a code change request — grant push
+		lineComment := evt != nil && evt.CommentFilePath != ""
+		// MR review events (opened/updated) imply the agent may need to fix issues
+		mrReview := evt != nil && (evt.Type == event.TypeMROpened || evt.Type == event.TypeMRUpdated)
+		if explicitPush || lineComment || mrReview {
 			perms = append(perms, "- You MAY push commits")
 		} else {
 			perms = append(perms, "- You must NOT push commits (not requested)")

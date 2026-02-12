@@ -142,7 +142,7 @@ type parsedResponse struct {
 func buildPrompt(text string) string {
 	return fmt.Sprintf(`Extract the user's intent from this message. Return JSON with:
 - instructions: The core request/instructions (what they want done)
-- requested_actions: Array of privileged actions explicitly requested. Valid values: "merge", "approve", "dismiss_reviews"
+- requested_actions: Array of privileged actions explicitly requested. Valid values: "merge", "approve", "dismiss_reviews", "push"
 - confidence: How confident you are in the extraction (0.0 to 1.0)
 
 Only include actions in requested_actions if the user EXPLICITLY asks for them.

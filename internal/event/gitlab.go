@@ -21,6 +21,11 @@ type gitLabPayload struct {
 		TargetBranch string `json:"target_branch"`
 		Action       string `json:"action"`
 		NoteableType string `json:"noteable_type"`
+		DiscussionID string `json:"discussion_id"`
+		Position     struct {
+			NewPath string `json:"new_path"`
+			NewLine int    `json:"new_line"`
+		} `json:"position"`
 	} `json:"object_attributes"`
 	MergeRequest struct {
 		IID          int    `json:"iid"`
@@ -85,6 +90,9 @@ func NormalizeGitLabEvent(glEvent *webhook.GitLabEvent) (*Event, error) {
 		event.CommentID = payload.ObjectAttributes.ID
 		event.CommentBody = payload.ObjectAttributes.Note
 		event.CommentAuthor = payload.User.Username
+		event.CommentFilePath = payload.ObjectAttributes.Position.NewPath
+		event.CommentLine = payload.ObjectAttributes.Position.NewLine
+		event.CommentDiscussionID = payload.ObjectAttributes.DiscussionID
 
 		if containsMention(payload.ObjectAttributes.Note) {
 			event.Type = TypeMention

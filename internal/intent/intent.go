@@ -7,6 +7,7 @@ const (
 	ActionMerge          Action = "merge"
 	ActionApprove        Action = "approve"
 	ActionDismissReviews Action = "dismiss_reviews"
+	ActionPush           Action = "push"
 )
 
 // ParsedIntent represents the extracted intent from user input.

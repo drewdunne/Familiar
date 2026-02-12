@@ -36,9 +36,12 @@ type Event struct {
 	TargetBranch  string
 
 	// Comment information (for TypeMRComment and TypeMention).
-	CommentID     int
-	CommentBody   string
-	CommentAuthor string
+	CommentID           int
+	CommentBody         string
+	CommentAuthor       string
+	CommentFilePath     string // File path for line-level comments (diff notes)
+	CommentLine         int    // Line number for line-level comments
+	CommentDiscussionID string // Discussion thread ID for threaded replies
 
 	// Actor who triggered the event.
 	Actor string

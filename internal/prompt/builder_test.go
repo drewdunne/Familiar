@@ -233,6 +233,79 @@ func TestBuilder_Build_IncludesCommentBody(t *testing.T) {
 	}
 }
 
+func TestBuilder_Build_IncludesCommentFileAndLine(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:                event.TypeMRComment,
+		Provider:            "gitlab",
+		RepoOwner:           "owner",
+		RepoName:            "repo",
+		MRNumber:            42,
+		SourceBranch:        "feature",
+		TargetBranch:        "main",
+		CommentBody:         "Add an exclamation mark here",
+		CommentAuthor:       "reviewer1",
+		CommentFilePath:     "services/api/src/index.ts",
+		CommentLine:         8,
+		CommentDiscussionID: "abc123",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MRComment: "Respond to the comment",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "never",
+			PushCommits: "never",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	if !strings.Contains(prompt, "services/api/src/index.ts") {
+		t.Error("Prompt should contain the commented file path")
+	}
+	if !strings.Contains(prompt, "8") {
+		t.Error("Prompt should contain the commented line number")
+	}
+	if !strings.Contains(prompt, "abc123") {
+		t.Error("Prompt should contain the discussion ID for thread replies")
+	}
+}
+
+func TestBuilder_Build_OmitsFilePathWhenEmpty(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:          event.TypeMRComment,
+		Provider:      "gitlab",
+		RepoOwner:     "owner",
+		RepoName:      "repo",
+		MRNumber:      42,
+		SourceBranch:  "feature",
+		TargetBranch:  "main",
+		CommentBody:   "General comment on the MR",
+		CommentAuthor: "reviewer1",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MRComment: "Respond",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "never",
+			PushCommits: "never",
+		},
+	}
+
+	prompt := builder.Build(evt, cfg, nil)
+
+	if strings.Contains(prompt, "File:") {
+		t.Error("Prompt should not contain file section when no file path")
+	}
+}
+
 func TestBuilder_Build_OmitsEmptyCommentBody(t *testing.T) {
 	builder := NewBuilder()
 
@@ -326,8 +399,149 @@ func TestBuilder_Build_OnRequestWithoutRequest(t *testing.T) {
 	if !strings.Contains(prompt, "must NOT merge (not requested)") {
 		t.Error("Prompt should indicate merge is not requested")
 	}
+	// MR opened is a review event — push should be implicitly granted
+	if !strings.Contains(prompt, "MAY push commits") {
+		t.Error("Prompt should allow push for MR review events")
+	}
+}
+
+func TestBuilder_Build_MRUpdatedImpliesPush(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:         event.TypeMRUpdated,
+		MRNumber:     1,
+		SourceBranch: "feature",
+		TargetBranch: "main",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MRUpdated: "Review changes",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "on_request",
+			PushCommits: "on_request",
+		},
+	}
+
+	parsedIntent := &intent.ParsedIntent{
+		Instructions:     "Review new commits",
+		RequestedActions: []intent.Action{},
+	}
+
+	prompt := builder.Build(evt, cfg, parsedIntent)
+
+	if !strings.Contains(prompt, "MAY push commits") {
+		t.Error("Prompt should allow push for MR updated events")
+	}
+}
+
+func TestBuilder_Build_LineCommentImpliesPush(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:            event.TypeMRComment,
+		MRNumber:        1,
+		SourceBranch:    "feature",
+		TargetBranch:    "main",
+		CommentBody:     "Add an exclamation mark here",
+		CommentAuthor:   "reviewer",
+		CommentFilePath: "services/api/src/index.ts",
+		CommentLine:     8,
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MRComment: "Respond",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "on_request",
+			PushCommits: "on_request",
+		},
+	}
+
+	// No explicit push action in intent — but comment is on a specific line
+	parsedIntent := &intent.ParsedIntent{
+		Instructions:     "Add exclamation mark",
+		RequestedActions: []intent.Action{},
+	}
+
+	prompt := builder.Build(evt, cfg, parsedIntent)
+
+	if !strings.Contains(prompt, "MAY push commits") {
+		t.Error("Prompt should allow push for line-level comments even without explicit push action")
+	}
+}
+
+func TestBuilder_Build_GeneralCommentDoesNotImplyPush(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:          event.TypeMRComment,
+		MRNumber:      1,
+		SourceBranch:  "feature",
+		TargetBranch:  "main",
+		CommentBody:   "Looks good overall",
+		CommentAuthor: "reviewer",
+		// No CommentFilePath — this is a general MR comment
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MRComment: "Respond",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "on_request",
+			PushCommits: "on_request",
+		},
+	}
+
+	parsedIntent := &intent.ParsedIntent{
+		Instructions:     "Acknowledge",
+		RequestedActions: []intent.Action{},
+	}
+
+	prompt := builder.Build(evt, cfg, parsedIntent)
+
 	if !strings.Contains(prompt, "must NOT push commits (not requested)") {
-		t.Error("Prompt should indicate push is not requested")
+		t.Error("General comments should not imply push permission")
+	}
+}
+
+func TestBuilder_Build_OnRequestWithPushAction(t *testing.T) {
+	builder := NewBuilder()
+
+	evt := &event.Event{
+		Type:         event.TypeMRComment,
+		MRNumber:     1,
+		SourceBranch: "feature",
+		TargetBranch: "main",
+	}
+
+	cfg := &config.MergedConfig{
+		Prompts: config.PromptsConfig{
+			MRComment: "Respond",
+		},
+		Permissions: config.PermissionsConfig{
+			Merge:       "on_request",
+			PushCommits: "on_request",
+		},
+	}
+
+	// Intent with push action (but not merge)
+	parsedIntent := &intent.ParsedIntent{
+		Instructions:     "Change the string",
+		RequestedActions: []intent.Action{intent.ActionPush},
+	}
+
+	prompt := builder.Build(evt, cfg, parsedIntent)
+
+	if !strings.Contains(prompt, "MAY push commits") {
+		t.Error("Prompt should allow push when push action is requested")
+	}
+	if !strings.Contains(prompt, "must NOT merge (not requested)") {
+		t.Error("Prompt should not allow merge when only push is requested")
 	}
 }
 
