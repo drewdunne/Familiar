@@ -198,6 +198,37 @@ func (c *Client) ExecInContainer(ctx context.Context, containerID string, cmd []
 	return nil
 }
 
+// ContainerInspect holds selected fields from a container inspection.
+type ContainerInspect struct {
+	Mounts []MountPoint
+}
+
+// MountPoint describes a mount in a running container.
+type MountPoint struct {
+	Source      string
+	Destination string
+	RO          bool
+}
+
+// InspectContainer returns inspection details for a container.
+func (c *Client) InspectContainer(ctx context.Context, containerID string) (*ContainerInspect, error) {
+	resp, err := c.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting container: %w", err)
+	}
+
+	mounts := make([]MountPoint, len(resp.Mounts))
+	for i, m := range resp.Mounts {
+		mounts[i] = MountPoint{
+			Source:      m.Source,
+			Destination: m.Destination,
+			RO:          !m.RW,
+		}
+	}
+
+	return &ContainerInspect{Mounts: mounts}, nil
+}
+
 // GetContainerLogs returns container logs.
 func (c *Client) GetContainerLogs(ctx context.Context, containerID string) (io.ReadCloser, error) {
 	return c.cli.ContainerLogs(ctx, containerID, container.LogsOptions{
