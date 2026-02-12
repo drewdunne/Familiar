@@ -2,6 +2,7 @@ services:
   familiar:
     build: .
     network_mode: host
+    user: "${UID}:${GID}"
     volumes:
       - ./config.yaml:/etc/familiar/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
