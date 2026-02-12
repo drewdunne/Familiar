@@ -347,8 +347,8 @@ func containerCmd(prompt string) (cmd []string, extraEnv []string) {
 		`chmod 600 /home/agent/.config/glab-cli/config.yml; ` +
 		`fi; `
 
-	// Run claude in tmux
-	setupCmd += `tmux new-session -d -s claude 'claude --dangerously-skip-permissions -p "$FAMILIAR_PROMPT"' && ` +
+	// Run claude in tmux; signal the wait channel when done so the container stays alive
+	setupCmd += `tmux new-session -d -s claude 'claude --dangerously-skip-permissions -p "$FAMILIAR_PROMPT"; tmux wait-for -S claude' && ` +
 		`tmux wait-for claude`
 
 	return []string{"-c", setupCmd}, []string{"FAMILIAR_PROMPT=" + prompt}
