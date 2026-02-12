@@ -3,11 +3,33 @@ package event
 import (
 	"context"
 	"log"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/drewdunne/familiar/internal/config"
 	"github.com/drewdunne/familiar/internal/intent"
 )
+
+// gitlabBotPattern matches GitLab project access token bot usernames.
+// Format: project_<id>_bot_<hash>
+var gitlabBotPattern = regexp.MustCompile(`^project_\d+_bot_`)
+
+// isBotActor returns true if the actor username matches known bot patterns.
+func isBotActor(actor string) bool {
+	if actor == "" {
+		return false
+	}
+	// GitHub app bots end with [bot]
+	if strings.HasSuffix(actor, "[bot]") {
+		return true
+	}
+	// GitLab project access token bots
+	if gitlabBotPattern.MatchString(actor) {
+		return true
+	}
+	return false
+}
 
 // Handler processes a normalized event with merged config and parsed intent.
 type Handler func(ctx context.Context, event *Event, cfg *config.MergedConfig, intent *intent.ParsedIntent) error
@@ -37,6 +59,12 @@ func NewRouter(serverCfg *config.Config, handler Handler, parser intent.Parser) 
 
 // Route processes an event through the routing pipeline.
 func (r *Router) Route(ctx context.Context, event *Event) error {
+	// Skip events from bot actors to prevent recursive loops
+	if isBotActor(event.Actor) {
+		log.Printf("Skipping event from bot actor: %s", event.Actor)
+		return nil
+	}
+
 	// Check if event type is enabled at server level first
 	if !r.isEventEnabled(event.Type) {
 		log.Printf("Event type disabled: %s", event.Type)

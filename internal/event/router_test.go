@@ -393,6 +393,75 @@ func TestRouter_IntentParsing_ParserError(t *testing.T) {
 	}
 }
 
+func TestIsBotActor(t *testing.T) {
+	tests := []struct {
+		actor string
+		want  bool
+	}{
+		// GitLab project access token bots
+		{"project_1_bot_d0fe5ec2e069d8e934540c30708818d6", true},
+		{"project_123_bot_abc123", true},
+		{"project_0_bot_x", true},
+
+		// GitHub app bots
+		{"dependabot[bot]", true},
+		{"github-actions[bot]", true},
+		{"renovate[bot]", true},
+
+		// Real users
+		{"drewdunne", false},
+		{"alice", false},
+		{"project_manager", false}, // not a bot pattern
+		{"bot_user", false},        // doesn't match pattern
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.actor, func(t *testing.T) {
+			if got := isBotActor(tt.actor); got != tt.want {
+				t.Errorf("isBotActor(%q) = %v, want %v", tt.actor, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRouter_SkipsBotActor(t *testing.T) {
+	handlerCalled := false
+	handler := func(ctx context.Context, e *Event, cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) error {
+		handlerCalled = true
+		return nil
+	}
+
+	serverCfg := &config.Config{
+		Events: config.ServerEventsConfig{
+			MRComment: true,
+		},
+		Agents: config.AgentsConfig{
+			DebounceSeconds: 1,
+		},
+	}
+
+	router := NewRouter(serverCfg, handler, nil)
+
+	event := &Event{
+		Type:      TypeMRComment,
+		Provider:  "gitlab",
+		RepoOwner: "owner",
+		RepoName:  "repo",
+		MRNumber:  42,
+		Actor:     "project_1_bot_d0fe5ec2e069d8e934540c30708818d6",
+	}
+
+	err := router.Route(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Route() error = %v", err)
+	}
+
+	if handlerCalled {
+		t.Error("Handler should not be called for bot actor events")
+	}
+}
+
 func TestRouter_UnknownEventType(t *testing.T) {
 	handlerCalled := false
 	handler := func(ctx context.Context, e *Event, cfg *config.MergedConfig, parsedIntent *intent.ParsedIntent) error {
