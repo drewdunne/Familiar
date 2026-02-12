@@ -15,8 +15,9 @@ RUN apk add --no-cache ca-certificates git docker-cli
 
 COPY --from=builder /build/familiar /usr/local/bin/familiar
 
-# Create directories
-RUN mkdir -p /etc/familiar /var/log/familiar /var/cache/familiar
+# Create directories with open permissions (actual dirs come from volume mounts)
+RUN mkdir -p /etc/familiar /var/log/familiar /var/cache/familiar && \
+    chmod 777 /var/log/familiar /var/cache/familiar
 
 EXPOSE 7000
 
