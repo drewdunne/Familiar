@@ -83,11 +83,12 @@ func runServe(args []string) {
 
 	// Create agent spawner
 	spawner, err := agent.NewSpawner(agent.SpawnerConfig{
-		Image:          cfg.Agents.Image,
-		ClaudeAuthDir:  cfg.Agents.ClaudeAuthDir,
-		MaxAgents:      cfg.Concurrency.MaxAgents,
-		TimeoutMinutes: cfg.Agents.TimeoutMinutes,
-		NetworkMode:    cfg.Agents.NetworkMode,
+		Image:            cfg.Agents.Image,
+		ClaudeAuthDir:    cfg.Agents.ClaudeAuthDir,
+		MaxAgents:        cfg.Concurrency.MaxAgents,
+		TimeoutMinutes:   cfg.Agents.TimeoutMinutes,
+		NetworkMode:      cfg.Agents.NetworkMode,
+		RepoCacheHostDir: cfg.RepoCache.HostDir,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create agent spawner: %v", err)

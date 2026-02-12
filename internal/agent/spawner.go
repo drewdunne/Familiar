@@ -9,16 +9,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/drewdunne/familiar/internal/agent/instructions"
 	"github.com/drewdunne/familiar/internal/docker"
 )
 
 // SpawnerConfig configures the agent spawner.
 type SpawnerConfig struct {
-	Image          string
-	ClaudeAuthDir  string // Host path — used for Docker bind mounts to agent containers
-	MaxAgents      int
-	TimeoutMinutes int    // 0 means no timeout
-	NetworkMode    string // Docker network mode (e.g. "host")
+	Image            string
+	ClaudeAuthDir    string // Host path — used for Docker bind mounts to agent containers
+	MaxAgents        int
+	TimeoutMinutes   int    // 0 means no timeout
+	NetworkMode      string // Docker network mode (e.g. "host")
+	RepoCacheHostDir string // Host path to repo cache — mounted at /cache in agent containers
 }
 
 // SpawnRequest contains parameters for spawning an agent.
@@ -98,6 +100,15 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 		},
 	}
 
+	// Mount repo cache for git worktree support
+	if s.cfg.RepoCacheHostDir != "" {
+		mounts = append(mounts, docker.Mount{
+			Source:   s.cfg.RepoCacheHostDir,
+			Target:   "/cache",
+			ReadOnly: false,
+		})
+	}
+
 	// Prepare tmpfs mounts
 	var tmpfsMounts []docker.TmpfsMount
 
@@ -129,7 +140,7 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*Session, error)
 	}
 
 	// Build container command (claude CLI inside tmux, prompt via env var)
-	cmd, cmdEnv := containerCmd(req.Prompt)
+	cmd, cmdEnv := containerCmd(req.Prompt, instructions.Content())
 	env = append(env, cmdEnv...)
 
 	// Create container
@@ -328,11 +339,33 @@ func resolveContainerUser() string {
 // to /home/agent/.claude (tmpfs), sets up glab config if GITLAB_HOST is set,
 // then runs Claude in a tmux session.
 // Uses -p (print mode) for non-interactive operation.
-func containerCmd(prompt string) (cmd []string, extraEnv []string) {
+func containerCmd(prompt string, claudeMD string) (cmd []string, extraEnv []string) {
 	// Setup claude credentials
 	setupCmd := `mkdir -p /home/agent/.claude && ` +
 		`cp /claude-auth-src/.credentials.json /home/agent/.claude/ && ` +
 		`cp /claude-auth-src/settings.json /home/agent/.claude/ 2>/dev/null; `
+
+	// Write Familiar agent instructions as global CLAUDE.md
+	setupCmd += `printf '%s' "$FAMILIAR_CLAUDE_MD" > /home/agent/.claude/CLAUDE.md; `
+
+	// Mark mounted directories as safe (ownership may differ from container user)
+	setupCmd += `git config --global safe.directory '*'; `
+
+	// Create git credential helper that returns tokens from environment variables
+	setupCmd += `cat > /home/agent/git-credential-helper <<'CREDEOF'
+#!/bin/sh
+# Read stdin to consume git's input (protocol, host, etc.)
+while read line; do [ -z "$line" ] && break; done
+if [ -n "$GITLAB_TOKEN" ]; then
+  echo "username=oauth2"
+  echo "password=$GITLAB_TOKEN"
+elif [ -n "$GITHUB_TOKEN" ]; then
+  echo "username=x-access-token"
+  echo "password=$GITHUB_TOKEN"
+fi
+CREDEOF
+chmod +x /home/agent/git-credential-helper && ` +
+		`git config --global credential.helper /home/agent/git-credential-helper; `
 
 	// Setup glab config if GITLAB_HOST is set (for self-hosted GitLab)
 	setupCmd += `if [ -n "$GITLAB_HOST" ]; then ` +
@@ -351,7 +384,10 @@ func containerCmd(prompt string) (cmd []string, extraEnv []string) {
 	setupCmd += `tmux new-session -d -s claude 'claude --dangerously-skip-permissions -p "$FAMILIAR_PROMPT"; tmux wait-for -S claude' && ` +
 		`tmux wait-for claude`
 
-	return []string{"-c", setupCmd}, []string{"FAMILIAR_PROMPT=" + prompt}
+	return []string{"-c", setupCmd}, []string{
+		"FAMILIAR_PROMPT=" + prompt,
+		"FAMILIAR_CLAUDE_MD=" + claudeMD,
+	}
 }
 
 // StopAll stops all active sessions.

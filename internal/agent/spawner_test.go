@@ -236,30 +236,35 @@ func TestSpawner_CaptureAndStop(t *testing.T) {
 
 func TestContainerCmd(t *testing.T) {
 	tests := []struct {
-		name   string
-		prompt string
+		name     string
+		prompt   string
+		claudeMD string
 	}{
 		{
-			name:   "simple prompt",
-			prompt: "Review this merge request",
+			name:     "simple prompt",
+			prompt:   "Review this merge request",
+			claudeMD: "# Test Instructions\n\nSome guidance.",
 		},
 		{
-			name:   "prompt with single quotes",
-			prompt: "Review the user's code",
+			name:     "prompt with single quotes",
+			prompt:   "Review the user's code",
+			claudeMD: "# Agent\n\nDon't force-push.",
 		},
 		{
-			name:   "prompt with special characters",
-			prompt: "Check for $variables and `backticks`",
+			name:     "prompt with special characters",
+			prompt:   "Check for $variables and `backticks`",
+			claudeMD: "Instructions with $dollar and `backticks`",
 		},
 		{
-			name:   "multiline prompt",
-			prompt: "## Context\n- Repository: foo/bar\n\n## Task\nReview this PR",
+			name:     "multiline prompt",
+			prompt:   "## Context\n- Repository: foo/bar\n\n## Task\nReview this PR",
+			claudeMD: "## Section\n- Item one\n- Item two",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd, env := containerCmd(tt.prompt)
+			cmd, env := containerCmd(tt.prompt, tt.claudeMD)
 
 			// Should produce shell command via /bin/sh -c
 			if len(cmd) != 2 || cmd[0] != "-c" {
@@ -275,6 +280,30 @@ func TestContainerCmd(t *testing.T) {
 			}
 			if !strings.Contains(cmd[1], "cp /claude-auth-src/settings.json /home/agent/.claude/") {
 				t.Error("command should copy settings.json from /claude-auth-src")
+			}
+
+			// Command should write CLAUDE.md via env var (not embed content in shell)
+			if !strings.Contains(cmd[1], "CLAUDE.md") {
+				t.Error("command should write CLAUDE.md")
+			}
+			if !strings.Contains(cmd[1], "FAMILIAR_CLAUDE_MD") {
+				t.Error("command should reference FAMILIAR_CLAUDE_MD env var")
+			}
+			if strings.Contains(cmd[1], tt.claudeMD) {
+				t.Error("command should not embed raw claudeMD content; should use env var")
+			}
+
+			// Command should configure git safe.directory
+			if !strings.Contains(cmd[1], "git config --global safe.directory") {
+				t.Error("command should configure git safe.directory")
+			}
+
+			// Command should create a git credential helper script
+			if !strings.Contains(cmd[1], "git-credential-helper") {
+				t.Error("command should create a git credential helper script")
+			}
+			if !strings.Contains(cmd[1], "credential.helper") {
+				t.Error("command should configure git to use the credential helper")
 			}
 
 			// Command should invoke claude with --dangerously-skip-permissions and -p (print mode)
@@ -293,15 +322,21 @@ func TestContainerCmd(t *testing.T) {
 			}
 
 			// Env should contain the prompt
-			found := false
+			foundPrompt := false
+			foundClaudeMD := false
 			for _, e := range env {
 				if e == "FAMILIAR_PROMPT="+tt.prompt {
-					found = true
-					break
+					foundPrompt = true
+				}
+				if e == "FAMILIAR_CLAUDE_MD="+tt.claudeMD {
+					foundClaudeMD = true
 				}
 			}
-			if !found {
+			if !foundPrompt {
 				t.Error("env should contain FAMILIAR_PROMPT with the prompt value")
+			}
+			if !foundClaudeMD {
+				t.Error("env should contain FAMILIAR_CLAUDE_MD with the claudeMD value")
 			}
 		})
 	}
@@ -436,6 +471,105 @@ func TestSpawner_Spawn_UsesTmpfsHome(t *testing.T) {
 	// Container should be created successfully
 	if session.ContainerID == "" {
 		t.Error("session.ContainerID should not be empty")
+	}
+}
+
+func TestSpawner_Spawn_MountsRepoCacheDir(t *testing.T) {
+	// Skip if Docker not available
+	if os.Getenv("DOCKER_HOST") == "" && os.Getenv("CI") == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+			t.Skip("Docker not available")
+		}
+	}
+
+	worktreeDir := t.TempDir()
+	repoCacheDir := t.TempDir()
+
+	spawner, err := NewSpawner(SpawnerConfig{
+		Image:            "alpine:latest",
+		RepoCacheHostDir: repoCacheDir,
+	})
+	if err != nil {
+		t.Fatalf("NewSpawner() error = %v", err)
+	}
+	defer spawner.Close()
+
+	session, err := spawner.Spawn(context.Background(), SpawnRequest{
+		ID:           "test-repocache-mount",
+		WorktreePath: worktreeDir,
+		WorkDir:      "/workspace",
+		Prompt:       "echo test",
+	})
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	defer spawner.Stop(context.Background(), session.ID)
+
+	// Container should be created successfully with the repo cache mount
+	if session.ContainerID == "" {
+		t.Error("session.ContainerID should not be empty")
+	}
+
+	// Verify via docker inspect that /cache mount exists
+	inspect, err := spawner.client.InspectContainer(context.Background(), session.ContainerID)
+	if err != nil {
+		t.Fatalf("InspectContainer() error = %v", err)
+	}
+
+	found := false
+	for _, mount := range inspect.Mounts {
+		if mount.Destination == "/cache" && mount.Source == repoCacheDir {
+			found = true
+			if mount.RO {
+				t.Error("repo cache mount should be read-write, got read-only")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected /cache mount with source %q, mounts: %+v", repoCacheDir, inspect.Mounts)
+	}
+}
+
+func TestSpawner_Spawn_NoRepoCacheMountWhenEmpty(t *testing.T) {
+	// Skip if Docker not available
+	if os.Getenv("DOCKER_HOST") == "" && os.Getenv("CI") == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+			t.Skip("Docker not available")
+		}
+	}
+
+	worktreeDir := t.TempDir()
+
+	spawner, err := NewSpawner(SpawnerConfig{
+		Image: "alpine:latest",
+	})
+	if err != nil {
+		t.Fatalf("NewSpawner() error = %v", err)
+	}
+	defer spawner.Close()
+
+	session, err := spawner.Spawn(context.Background(), SpawnRequest{
+		ID:           "test-no-repocache",
+		WorktreePath: worktreeDir,
+		WorkDir:      "/workspace",
+		Prompt:       "echo test",
+	})
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	defer spawner.Stop(context.Background(), session.ID)
+
+	// Verify via docker inspect that /cache mount does NOT exist
+	inspect, err := spawner.client.InspectContainer(context.Background(), session.ContainerID)
+	if err != nil {
+		t.Fatalf("InspectContainer() error = %v", err)
+	}
+
+	for _, mount := range inspect.Mounts {
+		if mount.Destination == "/cache" {
+			t.Errorf("unexpected /cache mount when RepoCacheHostDir is empty: %+v", mount)
+		}
 	}
 }
 
