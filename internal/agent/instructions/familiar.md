@@ -44,6 +44,14 @@ done
 - Retry up to **3 attempts** if push fails due to remote changes.
 - If all 3 attempts fail, stop and report the failure — do not loop indefinitely.
 
+## Responding to Comments
+
+When your task involves responding to MR/PR comments:
+
+- **Always reply in the discussion thread**, not as a top-level MR comment. Use the discussion/thread API so reviewers see your response in context.
+- **Line-specific comments are about that line.** If a reviewer left a comment on a specific line of code, they are referencing that exact line. Always read the line the comment is attached to and evaluate your response in that context — even if the comment text doesn't explicitly mention the code. The line IS the context.
+- Before implementing feedback, verify the suggestion is correct by reading the relevant code yourself. Do not blindly agree or implement.
+
 ## Constraints
 
 - **Never force-push.** No `--force`, no `--force-with-lease`. Other agents' work would be lost.

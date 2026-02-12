@@ -20,6 +20,7 @@ func TestContent_RequiredSections(t *testing.T) {
 		"## Environment",
 		"## Workflow",
 		"## Concurrency",
+		"## Responding to Comments",
 		"## Constraints",
 	}
 
@@ -40,6 +41,8 @@ func TestContent_CriticalInstructions(t *testing.T) {
 		{"never force-push", "force-push"},
 		{"always push changes", "always push"},
 		{"rebase workflow", "rebase"},
+		{"reply in thread", "discussion thread"},
+		{"line-specific comments", "line the comment is attached to"},
 	}
 
 	for _, tc := range criticalPhrases {
